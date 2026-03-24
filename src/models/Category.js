@@ -4,13 +4,11 @@ const categorySchema = new mongoose.Schema({
     name: {
         type: String,
         required: true,
-        default: 'Sunday Service'
     },
     type: {
         type: String,
         enum: ['rf','expense'],
         required: true,
-        default: 'expense',
     },
     color: {
         type: String,
@@ -19,7 +17,10 @@ const categorySchema = new mongoose.Schema({
         type: Boolean,
         default: true
     },
-    createdBy: mongoose.Schema.Types.ObjectId,
+    createdBy: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User'
+    },
 }, { timestamps: true});
 
 export const Category = mongoose.model('Category', categorySchema);
