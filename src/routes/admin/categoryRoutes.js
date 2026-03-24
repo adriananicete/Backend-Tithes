@@ -1,22 +1,24 @@
 import express from 'express';
 import { createCategory, deleteCategory, getAllCategories, updateCategory } from '../../controllers/admin/categoryController.js';
+import { verifyToken } from '../../middlewares/authMiddleware.js';
+import { authorizeRoles } from '../../middlewares/roleMiddleware.js';
 
 const router = express.Router();
 
 // @desc   Get all categories
 // @routes /api/admin/categories
-router.get('/', getAllCategories);
+router.get('/',verifyToken, authorizeRoles('admin'), getAllCategories);
 
 // @desc   Create new category
 // @routes /api/admin/categories
-router.post('/', createCategory);
+router.post('/',verifyToken, authorizeRoles('admin'), createCategory);
 
 // @desc   Update category
 // @routes /api/admin/categories/:id
-router.patch('/:id', updateCategory);
+router.patch('/:id',verifyToken, authorizeRoles('admin'), updateCategory);
 
 // @desc   Delete category
 // @routes /api/admin/categories/:id
-router.patch('/:id', deleteCategory);
+router.delete('/:id',verifyToken, authorizeRoles('admin'), deleteCategory);
 
 export default router;
