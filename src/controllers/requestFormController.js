@@ -1,7 +1,17 @@
+import mongoose from "mongoose";
 import { RequestForm } from "../models/RequestForm";
 
 const getAllRequestForms = async (req, res) => {
   try {
+    const requestForms  = await RequestForm.find().populate('requestedBy', 'name role').populate('category', 'name type').populate('approvedBy', 'name role').populate('validatedBy', 'name role');
+    if(requestForms .length === 0) return res.status(400).json({message: 'Request Form empty'});
+
+    res.status(200).json({
+      status: 'Success',
+      count: requestForms .length,
+      data: requestForms 
+
+    })
   } catch (error) {
     console.log(error);
     res.status(500).json({ error: error.message });
@@ -76,6 +86,18 @@ const submitRequestForm = async (req, res) => {
 
 const updateRequestForm = async (req, res) => {
   try {
+    const { id } = req.params;
+    if(!mongoose.Types.ObjectId.isValid(id)) return res.status(400).json({error: 'Invalid ID'});
+    const { body } = req;
+
+    const findRequestFormById = await RequestForm.findByIdAndUpdate(id, body, {new: true});
+    if(!findRequestFormById) return res.status(404).json({error: 'Request Form not found!'});
+
+    res.status(200).json({
+      status: 'Success',
+      message: 'Updated Successfully',
+      data: findRequestFormById
+    })
   } catch (error) {
     console.log(error);
     res.status(500).json({ error: error.message });

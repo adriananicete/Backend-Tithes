@@ -3,6 +3,7 @@ import mongoose from "mongoose";
 const requestFormSchema = new mongoose.Schema({
   rfNo: {
     type: String,
+    required: true
   },
   entryDate: {
     type: Date,
@@ -11,6 +12,7 @@ const requestFormSchema = new mongoose.Schema({
   category: {
     type: mongoose.Schema.Types.ObjectId,
     ref: "Category",
+    required: true,
   },
   requestedBy: {
     type: mongoose.Schema.Types.ObjectId,
