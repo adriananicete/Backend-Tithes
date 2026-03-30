@@ -167,18 +167,18 @@ const validateRequestForm = async (req, res) => {
     if (findRequestFormById.status !== "submitted")
       return res.status(400).json({ error: "Request Form must be submitted" });
 
-    if (req.user.role !== "validator")
+    if (!['validator', 'auditor', 'admin'].includes(req.user.role))
       return res
         .status(403)
         .json({ error: "No permission to validate this request form" });
 
     const updatedRequestForm = await RequestForm.findByIdAndUpdate(
       id,
-      {
+      {$set: {
         status: "for_approval",
         validatedBy: req.user.id,
         validatedAt: Date.now(),
-      },
+      }},
       { new: true, runValidators: true },
     );
 
@@ -215,18 +215,18 @@ const approveRequestForm = async (req, res) => {
 
     const approvedRequestForm = await RequestForm.findByIdAndUpdate(
       id,
-      {
+      {$set: {
         status: "approved",
         approvedBy: req.user.id,
         approvedAt: Date.now(),
-      },
+      }},
       { new: true, runValidators: true },
     ).populate("approvedBy", "name role");
 
     const { name, role } = approvedRequestForm.approvedBy;
 
     const responseData = {
-      rfNo: approvedRequestForm.id,
+      rfNo: approvedRequestForm.rfNo,
         status: approvedRequestForm.status,
         approvedAt: approvedRequestForm.approvedAt,
         approvedBy: { name, role},
@@ -245,6 +245,39 @@ const approveRequestForm = async (req, res) => {
 
 const rejectRequestForm = async (req, res) => {
   try {
+    const { id } = req.params;
+    if(!mongoose.Types.ObjectId.isValid(id)) return res.status(400).json({error: 'Invalid ID'});
+
+    const findRequestFormById = await RequestForm.findById(id);
+    if(!findRequestFormById) return res.status(404).json({error: 'Request form not found'});
+
+    if(!['admin','validator','auditor','pastor'].includes(req.user.role)) return res.status(403).json({error: 'Forbidden'});
+
+    if(!['submitted','validated','for_approval'].includes(findRequestFormById.status)) return res.status(400).json({error: 'Cannot reject this status'});
+
+    const { rejectionNote } = req.body;
+    if(!rejectionNote) return res.status(400).json({error: 'Reason for Rejection'});
+
+    const rejectedRequestForm = await RequestForm.findByIdAndUpdate(id, {$set: {
+      status: 'rejected',
+      rejectionNote: rejectionNote,
+      rejectedBy: req.user.id,
+      rejectedAt: Date.now()
+    }}, {new: true, runValidators: true}).populate('rejectedBy', 'name role');
+
+    res.status(200).json({
+      status: 'Success',
+      message: `Request Form rejected`,
+      data: {
+        rfNo: rejectedRequestForm.rfNo,
+        status: rejectedRequestForm.status,
+        rejectedAt: rejectedRequestForm.rejectedAt,
+        rejectedBy: {
+          name: rejectedRequestForm.rejectedBy.name,
+          role: rejectedRequestForm.rejectedBy.role
+        }
+      }
+    })
   } catch (error) {
     console.log(error);
     res.status(500).json({ error: error.message });
