@@ -53,6 +53,13 @@ const requestFormSchema = new mongoose.Schema({
   rejectionNote: {
     type: String,
   },
+  rejectedBy: {
+  type: mongoose.Schema.Types.ObjectId,
+  ref: 'User'
+},
+rejectedAt: {
+  type: Date
+},
   voucherId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Voucher'
