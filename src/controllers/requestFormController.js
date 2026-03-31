@@ -1,6 +1,18 @@
 import mongoose from "mongoose";
 import { RequestForm } from "../models/RequestForm";
 
+const generateRFNo = async () => {
+  const lastRF = await RequestForm.findOne().sort({ createdAt: -1 });
+  let newNumber = 1;
+
+  if (lastRF && lastRF.rfNo) {
+    const lastNum = parseInt(lastRF.rfNo.split("-")[1], 10);
+    if (!isNaN(lastNum)) newNumber = lastNum + 1;
+  }
+
+  return `RF-${String(newNumber).padStart(4, "0")}`;
+};
+
 const getAllRequestForms = async (req, res) => {
   try {
     const requestForms = await RequestForm.find()
@@ -8,7 +20,6 @@ const getAllRequestForms = async (req, res) => {
       .populate("category", "name type")
       .populate("approvedBy", "name role")
       .populate("validatedBy", "name role");
-    
 
     res.status(200).json({
       status: "Success",
@@ -25,38 +36,36 @@ const createRequestForm = async (req, res) => {
   try {
     const { entryDate, category, estimatedAmount, attachments } = req.body;
 
-    if (!entryDate) {
+    if (!entryDate)
       return res.status(400).json({ error: "Entry Date required!" });
-    } else if (!category) {
-      return res.status(400).json({ error: "Category required!" });
-    } else if (!estimatedAmount) {
+    if (!category) return res.status(400).json({ error: "Category required!" });
+    if (!estimatedAmount)
       return res.status(400).json({ error: "Estimated Amount required!" });
-    }
 
-    if(estimatedAmount < 0) return res.status(400).json({ error: "Estimated Amount must be a positive number" });
-
-    // RF formatter
-    const lastRF = await RequestForm.findOne().sort({ rfNo: -1 });
-    const lastNumber = lastRF ? parseInt(lastRF.rfNo.split("-")[1]) : 0;
-    const newRfNo = `RF-${String(lastNumber + 1).padStart(4, "0")}`;
-
-
+    const amount = Number(estimatedAmount);
+    if (isNaN(amount))
+      return res
+        .status(400)
+        .json({ error: "Estimated Amount must be a number" });
+    if (amount <= 0)
+      return res
+        .status(400)
+        .json({ error: "Estimated Amount must be greater than 0" });
 
     const newRequestForm = new RequestForm({
-      rfNo: newRfNo,
+      rfNo: await generateRFNo(),
       entryDate,
       category,
-      estimatedAmount,
-      attachments,
+      estimatedAmount: amount,
       requestedBy: req.user.id,
-      attachments: attachments
+      attachments: attachments || [],
     });
 
     await newRequestForm.save();
 
-    res.status(200).json({
+    res.status(201).json({
       status: "Success",
-      message: "Request Form Sent",
+      message: "Request Form Created",
       data: newRequestForm,
     });
   } catch (error) {
@@ -69,28 +78,31 @@ const submitRequestForm = async (req, res) => {
   try {
     const { id } = req.params;
 
-    const findRfId = await RequestForm.findById(id);
-    if (!findRfId)
-      return res.status(404).json({ error: "Request form ID not found" });
+    if (!mongoose.Types.ObjectId.isValid(id))
+      return res.status(400).json({ error: "Invalid ID" });
 
-    if (findRfId.requestedBy.toString() !== req.user.id)
-      return res.status(400).json({ error: "You cannot submit this request" });
+    const requestForm = await RequestForm.findById(id);
+    if (!requestForm)
+      return res.status(404).json({ error: "Request form not found" });
 
-    if (findRfId.status !== "draft")
-      return res.status(400).json({ error: "Already Submitted" });
+    if (requestForm.requestedBy.toString() !== req.user.id)
+      return res.status(403).json({ error: "You cannot submit this request" });
 
-    const submittedRequestForm = await RequestForm.findByIdAndUpdate(
-      id,
-      { $set: { status: "submitted" } },
-      { new: true },
-    );
+    if (requestForm.status !== "draft")
+      return res
+        .status(400)
+        .json({ error: "Only draft requests can be submitted" });
+
+    requestForm.status = "submitted";
+    await requestForm.save();
 
     res.status(200).json({
       status: "Success",
       message: "Request Form Submitted",
+      data: requestForm,
     });
   } catch (error) {
-    console.log(error);
+    console.error(error);
     res.status(500).json({ error: error.message });
   }
 };
@@ -112,10 +124,34 @@ const updateRequestForm = async (req, res) => {
     if (findRequestFormById.status !== "draft")
       return res.status(400).json({ error: "Status must be draft" });
 
-    const updatedRequestForm = await RequestForm.findByIdAndUpdate(id, body, {
-      new: true,
-      runValidators: true,
+    const allowedUpdates = [
+      "entryDate",
+      "category",
+      "estimatedAmount",
+      "attachments",
+    ];
+    const updates = {};
+    allowedUpdates.forEach((field) => {
+      if (body[field] !== undefined) updates[field] = body[field];
     });
+
+    if (updates.estimatedAmount !== undefined) {
+      const amount = Number(updates.estimatedAmount);
+      if (isNaN(amount) || amount <= 0)
+        return res
+          .status(400)
+          .json({ error: "Estimated Amount must be a positive number" });
+      updates.estimatedAmount = amount;
+    }
+
+    const updatedRequestForm = await RequestForm.findByIdAndUpdate(
+      id,
+      updates,
+      {
+        new: true,
+        runValidators: true,
+      },
+    );
 
     res.status(200).json({
       status: "Success",
