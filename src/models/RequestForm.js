@@ -17,6 +17,7 @@ const requestFormSchema = new mongoose.Schema({
   requestedBy: {
     type: mongoose.Schema.Types.ObjectId,
     ref: "User",
+    required: true,
   },
   estimatedAmount: {
     type: Number,
