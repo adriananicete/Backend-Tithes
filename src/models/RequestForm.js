@@ -3,7 +3,9 @@ import mongoose from "mongoose";
 const requestFormSchema = new mongoose.Schema({
   rfNo: {
     type: String,
-    required: true
+    required: true,
+    unique: true,
+    index: true
   },
   entryDate: {
     type: Date,
@@ -28,7 +30,6 @@ const requestFormSchema = new mongoose.Schema({
     enum: [
       "draft",
       "submitted",
-      "validated",
       "for_approval",
       "approved",
       "rejected",
