@@ -1,16 +1,27 @@
-import express from 'express';
-import { approveRequestForm, createRequestForm, deleteRequestForm, getAllRequestForms, receivedRequestForm, rejectRequestForm, updateRequestForm, validateRequestForm } from '../controllers/requestFormController.js';
+import express from "express";
+import { verifyToken } from "../middlewares/authMiddleware.js";
+import {
+  approveRequestForm,
+  createRequestForm,
+  deleteRequestForm,
+  getAllRequestForms,
+  receivedRequestForm,
+  rejectRequestForm,
+  submitRequestForm,
+  updateRequestForm,
+  validateRequestForm,
+} from "../controllers/requestFormController.js";
 
-const router = express.Router;
+const router = express.Router();
 
-router.get('/', getAllRequestForms);
-router.post('/', createRequestForm);
-router.patch('/:id', updateRequestForm);
-router.delete('/:id', deleteRequestForm);
-router.patch('/:id/submit', submitRequestForm);
-router.patch('/:id/validate', validateRequestForm);
-router.patch('/:id/approve', approveRequestForm);
-router.patch('/:id/reject', rejectRequestForm);
-router.patch('/:id/received', receivedRequestForm);
+router.get("/", verifyToken, getAllRequestForms);
+router.post("/", verifyToken, createRequestForm);
+router.patch("/:id", verifyToken, updateRequestForm);
+router.delete("/:id", verifyToken, deleteRequestForm);
+router.patch("/:id/submit", verifyToken, submitRequestForm);
+router.patch("/:id/validate", verifyToken, validateRequestForm);
+router.patch("/:id/approve", verifyToken, approveRequestForm);
+router.patch("/:id/reject", verifyToken, rejectRequestForm);
+router.patch("/:id/received", verifyToken, receivedRequestForm);
 
 export default router;
