@@ -7,6 +7,7 @@ import userRoutes from './src/routes/userRoutes.js';
 import categoryRoutes from './src/routes/admin/categoryRoutes.js';
 import tithesRoutes from './src/routes/tithesRoutes.js';
 import requestFormRoutes from './src/routes/requestFormRoutes.js'
+import voucherRoutes from './src/routes/voucherRoutes.js'
 
 const PORT = process.env.PORT || 7002;
 const app = express();
@@ -24,7 +25,8 @@ app.use('/api/admin/users', adminUserRoutes );
 app.use('/api/admin/categories', categoryRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/tithes', tithesRoutes);
-app.use('/api/request-form', requestFormRoutes)
+app.use('/api/request-form', requestFormRoutes);
+app.use('/api/vouchers', voucherRoutes);
 
 connectDB().then(() => {
     app.listen(PORT, () => console.log(`Server is running on port: ${PORT}`));
