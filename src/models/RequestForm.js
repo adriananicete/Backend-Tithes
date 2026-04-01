@@ -33,6 +33,7 @@ const requestFormSchema = new mongoose.Schema({
       "for_approval",
       "approved",
       "rejected",
+      "voucher_created",
       "disbursed",
     ],
     default: 'draft'

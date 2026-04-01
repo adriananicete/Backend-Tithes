@@ -19,7 +19,7 @@ const getAllRequestForms = async (req, res) => {
       .populate("requestedBy", "name role")
       .populate("category", "name type")
       .populate("approvedBy", "name role")
-      .populate("validatedBy", "name role");
+      .populate("validatedBy", "name role").populate('voucherId', 'pcfNo amount');
 
       if(requestForms.length === 0) return res.status(404).json({ error: "Request form empty" });
 
@@ -222,14 +222,22 @@ const validateRequestForm = async (req, res) => {
         },
       },
       { new: true, runValidators: true },
-    );
+    ).populate('validatedBy', 'name role').populate('category', 'name type');
+
+    const { name: validatedByName, role } = updatedRequestForm.validatedBy;
+    const { name: categoryName, type } = updatedRequestForm.category;
+    const responseData = {
+      rfNo: updatedRequestForm.rfNo,
+      status: updatedRequestForm.status,
+      category: { categoryName, type},
+      validatedAt: updatedRequestForm.validatedAt,
+      validatedBy: { validatedByName, role },
+    };
 
     res.status(200).json({
       status: "Success",
       message: "Request Form validated",
-      data: {
-        updatedRequestForm,
-      },
+      data: responseData
     });
   } catch (error) {
     console.log(error);
