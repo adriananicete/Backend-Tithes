@@ -1,6 +1,7 @@
 import mongoose from "mongoose";
 import { RequestForm } from "../models/RequestForm.js";
 import { Voucher } from "../models/Voucher.js";
+import { autoRecordExpense } from "../utils/autoRecordExpense.js";
 
 const getAllVouchers = async (req, res) => {
   try {
@@ -66,6 +67,8 @@ const createVoucher = async (req, res) => {
         receipts: receipts || []
     });
     await newVoucher.save()
+
+    await autoRecordExpense(newVoucher);
 
     await RequestForm.findByIdAndUpdate(rfId, {$set: {voucherId: newVoucher._id, status: 'voucher_created'}}, {new: true, runValidators: true});
 

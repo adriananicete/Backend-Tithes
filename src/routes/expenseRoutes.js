@@ -4,7 +4,7 @@ import { createManualExpense, getAllExpenses } from '../controllers/expenseContr
 
 const router = express.Router();
 
-router.get('/api/expenses', verifyToken, getAllExpenses);
-router.post('/api/expenses', verifyToken,  createManualExpense);
+router.get('/', verifyToken, getAllExpenses);
+router.post('/', verifyToken,  createManualExpense);
 
 export default router;
