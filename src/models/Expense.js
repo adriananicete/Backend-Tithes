@@ -9,7 +9,6 @@ const expenseSchema = new mongoose.Schema({
     linkedId: {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'Voucher',
-        required: true
     },
     amount: {
         type: Number,
