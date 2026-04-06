@@ -1,5 +1,6 @@
 import mongoose from "mongoose";
 import { RequestForm } from "../models/RequestForm.js";
+import { sendNotification } from "../utils/sendNotification.js";
 
 const generateRFNo = async () => {
   const lastRF = await RequestForm.findOne().sort({ createdAt: -1 });
@@ -19,9 +20,11 @@ const getAllRequestForms = async (req, res) => {
       .populate("requestedBy", "name role")
       .populate("category", "name type")
       .populate("approvedBy", "name role")
-      .populate("validatedBy", "name role").populate('voucherId', 'pcfNo amount');
+      .populate("validatedBy", "name role")
+      .populate("voucherId", "pcfNo amount");
 
-      if(requestForms.length === 0) return res.status(404).json({ error: "Request form empty" });
+    if (requestForms.length === 0)
+      return res.status(404).json({ error: "Request form empty" });
 
     res.status(200).json({
       status: "Success",
@@ -222,22 +225,32 @@ const validateRequestForm = async (req, res) => {
         },
       },
       { new: true, runValidators: true },
-    ).populate('validatedBy', 'name role').populate('category', 'name type');
+    )
+      .populate("validatedBy", "name role")
+      .populate("category", "name type");
 
     const { name: validatedByName, role } = updatedRequestForm.validatedBy;
     const { name: categoryName, type } = updatedRequestForm.category;
     const responseData = {
       rfNo: updatedRequestForm.rfNo,
       status: updatedRequestForm.status,
-      category: { categoryName, type},
+      category: { categoryName, type },
       validatedAt: updatedRequestForm.validatedAt,
       validatedBy: { validatedByName, role },
     };
 
+    await sendNotification({
+      userId: updatedRequestForm.requestedBy,
+      message: "Your request entry has been validated",
+      type: "info",
+      refId: updatedRequestForm._id,
+      refModel: "RequestForm",
+    });
+
     res.status(200).json({
       status: "Success",
       message: "Request Form validated",
-      data: responseData
+      data: responseData,
     });
   } catch (error) {
     console.log(error);
@@ -284,6 +297,14 @@ const approveRequestForm = async (req, res) => {
       approvedBy: { name, role },
     };
 
+    await sendNotification({
+      userId: approvedRequestForm.requestedBy,
+      message: "Your request entry has been approved",
+      type: "approval",
+      refId: approvedRequestForm._id,
+      refModel: "RequestForm",
+    });
+
     res.status(200).json({
       status: "Success",
       message: "Request Form approved",
@@ -308,11 +329,7 @@ const rejectRequestForm = async (req, res) => {
     if (!["admin", "validator", "auditor", "pastor"].includes(req.user.role))
       return res.status(403).json({ error: "Forbidden" });
 
-    if (
-      !["submitted", "for_approval"].includes(
-        findRequestFormById.status,
-      )
-    )
+    if (!["submitted", "for_approval"].includes(findRequestFormById.status))
       return res.status(400).json({ error: "Cannot reject this status" });
 
     const { rejectionNote } = req.body;
@@ -331,6 +348,15 @@ const rejectRequestForm = async (req, res) => {
       },
       { new: true, runValidators: true },
     ).populate("rejectedBy", "name role");
+
+    await sendNotification({
+      userId: rejectedRequestForm.requestedBy,
+      message: "Your request entry has been rejected",
+      type: "rejection",
+      refId: rejectedRequestForm._id,
+      refModel: "RequestForm",
+    });
+
 
     res.status(200).json({
       status: "Success",
@@ -354,23 +380,43 @@ const rejectRequestForm = async (req, res) => {
 const receivedRequestForm = async (req, res) => {
   try {
     const { id } = req.params;
-    if(!mongoose.Types.ObjectId.isValid(id)) return res.status(400).json({ error: 'Bad Request'});
+    if (!mongoose.Types.ObjectId.isValid(id))
+      return res.status(400).json({ error: "Bad Request" });
 
     const findRequestFormById = await RequestForm.findById(id);
-    if(!findRequestFormById) return res.status(404).json({error: 'Request form not found'});
+    if (!findRequestFormById)
+      return res.status(404).json({ error: "Request form not found" });
 
-    if(findRequestFormById.requestedBy.toString() !== req.user.id) return res.status(403).json({error: 'Only the requestor can confirm receipt'});
+    if (findRequestFormById.requestedBy.toString() !== req.user.id)
+      return res
+        .status(403)
+        .json({ error: "Only the requestor can confirm receipt" });
 
-    if(findRequestFormById.status !== 'approved') return res.status(400).json({error: 'Request form must be approved before confirming receipt'});
+    if (findRequestFormById.status !== "approved")
+      return res
+        .status(400)
+        .json({
+          error: "Request form must be approved before confirming receipt",
+        });
 
-    const disbursedRequestForm = await RequestForm.findByIdAndUpdate(id, { $set: { status: 'disbursed'}}, {new: true, runValidators: true});
+    const disbursedRequestForm = await RequestForm.findByIdAndUpdate(
+      id,
+      { $set: { status: "disbursed" } },
+      { new: true, runValidators: true },
+    );
 
-    res.status(200).json({
-      status: 'Success',
-      message: `${disbursedRequestForm.rfNo} disbursed successfully`
+    await sendNotification({
+      userId: disbursedRequestForm.requestedBy,
+      message: "Your request entry has been received",
+      type: "info",
+      refId: disbursedRequestForm._id,
+      refModel: "RequestForm",
     });
 
-
+    res.status(200).json({
+      status: "Success",
+      message: `${disbursedRequestForm.rfNo} disbursed successfully`,
+    });
   } catch (error) {
     console.log(error);
     res.status(500).json({ error: error.message });
