@@ -1,8 +1,11 @@
 import { Tithes } from "../models/TithesEntry.js";
+import { sendNotification } from "../utils/sendNotification.js";
 
 const getAllTithes = async (req, res) => {
   try {
-    const getAllData = await Tithes.find().populate("submittedBy", "name role").populate('reviewedBy', 'name role');
+    const getAllData = await Tithes.find()
+      .populate("submittedBy", "name role")
+      .populate("reviewedBy", "name role");
     if (getAllData.length === 0)
       return res.status(404).json({ error: "Tithes is Empty" });
 
@@ -82,6 +85,14 @@ const approveTithes = async (req, res) => {
       },
     );
 
+    await sendNotification({
+      userId: finderTithes.submittedBy,
+      message: "Your tithes entry has been approved",
+      type: "approval",
+      refId: finderTithes._id,
+      refModel: "Tithes",
+    });
+
     res.status(200).json({
       status: "Success",
       message: "Tithes Entry Approved!",
@@ -123,6 +134,14 @@ const rejectTithes = async (req, res) => {
       { new: true },
     );
 
+    await sendNotification({
+      userId: findTithes.submittedBy,
+      message: "Your tithes entry has been rejected",
+      type: "rejection",
+      refId: findTithes._id,
+      refModel: "Tithes",
+    });
+
     res.status(200).json({
       status: "Success",
       message: "Tithes Entry Rejected",
@@ -140,9 +159,7 @@ const updateTithes = async (req, res) => {
 
     const findyById = await Tithes.findById(id);
     if (!findyById)
-      return res
-        .status(404)
-        .json({ error: "Tithes entry not found" });
+      return res.status(404).json({ error: "Tithes entry not found" });
 
     if (findyById.submittedBy.toString() !== req.user.id)
       return res
@@ -150,9 +167,14 @@ const updateTithes = async (req, res) => {
         .json({ error: "The one who submit this can only update this entry" });
 
     if (findyById.status !== "pending")
-      return res.status(400).json({ error: "Cannot edit approved/rejected entry" });
+      return res
+        .status(400)
+        .json({ error: "Cannot edit approved/rejected entry" });
 
-    const findTithes = await Tithes.findByIdAndUpdate(id, body, { new: true,runValidators: true });
+    const findTithes = await Tithes.findByIdAndUpdate(id, body, {
+      new: true,
+      runValidators: true,
+    });
 
     res.status(200).json({
       status: "Success",

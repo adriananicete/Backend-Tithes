@@ -2,6 +2,7 @@ import mongoose from "mongoose";
 import { RequestForm } from "../models/RequestForm.js";
 import { Voucher } from "../models/Voucher.js";
 import { autoRecordExpense } from "../utils/autoRecordExpense.js";
+import { sendNotification } from "../utils/sendNotification.js";
 
 const getAllVouchers = async (req, res) => {
   try {
@@ -70,7 +71,16 @@ const createVoucher = async (req, res) => {
 
     await autoRecordExpense(newVoucher);
 
-    await RequestForm.findByIdAndUpdate(rfId, {$set: {voucherId: newVoucher._id, status: 'voucher_created'}}, {new: true, runValidators: true});
+    const vouch = await RequestForm.findByIdAndUpdate(rfId, {$set: {voucherId: newVoucher._id, status: 'voucher_created'}}, {new: true, runValidators: true});
+
+
+    await sendNotification({
+          userId: vouch.requestedBy,
+          message: `Voucher ${newVoucher.pcfNo} has been created for your request ${vouch.rfNo}`,
+          type: "info",
+          refId: vouch._id,
+          refModel: "Voucher",
+        });
 
     res.status(200).json({
         status: 'Success',
