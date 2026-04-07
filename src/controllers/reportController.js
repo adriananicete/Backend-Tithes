@@ -1,5 +1,6 @@
 import { Expense } from "../models/Expense.js";
 import { Tithes } from "../models/TithesEntry.js";
+import PDFDocument from "pdfkit";
 import excel from "exceljs";
 
 const getTithesReport = async (req, res) => {
@@ -127,4 +128,57 @@ const exportTithesExcel = async (req, res) => {
   }
 };
 
-export { getTithesReport, getExpenseReport };
+const exportTithesPDF = async (req, res) => {
+  try {
+    const { startDate, endDate } = req.query;
+    const filter = {};
+
+    if (startDate && endDate) {
+      filter.entryDate = {
+        $gte: new Date(startDate),
+        $lte: new Date(endDate),
+      };
+    }
+
+    const generateTithesReport  = await Tithes.find(filter).populate(
+      "submittedBy",
+      "name role",
+    );
+    if (generateTithesReport.length === 0)
+      return res.status(200).json({ message: "Tithes Empty" });
+
+    const doc = new PDFDocument();
+
+    // I-pipe sa response — hindi sa file system
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader(
+      "Content-Disposition",
+      "attachment; filename=tithes-report.pdf",
+    );
+    doc.pipe(res);
+
+    // Title
+    doc.fontSize(16).text("Tithes Report", { align: "center" });
+    doc.moveDown();
+
+    // Headers
+    doc
+      .fontSize(10)
+      .text("Entry Date | Service Type | Total | Submitted By | Status");
+    doc.moveDown();
+
+    // Data rows
+    generateTithesReport.forEach((item) => {
+      doc.text(
+        `${item.entryDate} | ${item.serviceType} | ${item.total} | ${item.submittedBy?.name} | ${item.status}`,
+      );
+    });
+
+    doc.end();
+  } catch (error) {
+    console.error(error);
+    res.status(500).json(error.message);
+  }
+};
+
+export { getTithesReport, getExpenseReport, exportTithesExcel, exportTithesPDF };
