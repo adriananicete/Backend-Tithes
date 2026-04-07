@@ -10,6 +10,7 @@ import requestFormRoutes from './src/routes/requestFormRoutes.js';
 import voucherRoutes from './src/routes/voucherRoutes.js';
 import expenseRoutes from './src/routes/expenseRoutes.js';
 import notificationRoutes from './src/routes/notificationRoutes.js';
+import reportRoutes from './src/routes/reportRoutes.js';
 
 const PORT = process.env.PORT || 7002;
 const app = express();
@@ -31,6 +32,7 @@ app.use('/api/request-form', requestFormRoutes);
 app.use('/api/vouchers', voucherRoutes);
 app.use('/api/expenses', expenseRoutes);
 app.use('/api/notifications', notificationRoutes);
+app.use('/api/reports', reportRoutes);
 
 connectDB().then(() => {
     app.listen(PORT, () => console.log(`Server is running on port: ${PORT}`));
