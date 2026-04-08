@@ -189,9 +189,13 @@ const centerText = (doc, text, colX, colWidth, y) => {
 };
 
 const colWidths = {
-    date: 100, service: 120, total: 80, 
-    submittedBy: 100, status: 80, reviewedBy: 100
-}
+  date: 100,
+  service: 120,
+  total: 80,
+  submittedBy: 100,
+  status: 80,
+  reviewedBy: 100,
+};
 
 const exportTithesPDF = async (req, res) => {
   try {
@@ -205,13 +209,9 @@ const exportTithesPDF = async (req, res) => {
       };
     }
 
-    const generateTithesReport = await Tithes.find(filter).populate(
-      "submittedBy",
-      "name role",
-    ).populate(
-      "reviewedBy",
-      "name role",
-    );
+    const generateTithesReport = await Tithes.find(filter)
+      .populate("submittedBy", "name role")
+      .populate("reviewedBy", "name role");
     if (generateTithesReport.length === 0)
       return res.status(200).json({ message: "Tithes Empty" });
 
@@ -229,23 +229,22 @@ const exportTithesPDF = async (req, res) => {
     doc.fontSize(16).text("Tithes Report", { align: "center" });
     doc.moveDown();
 
-    const tableLeft = 26
+    const tableLeft = 26;
 
     // Table coordinates
-    const tableTop = 150;
+    const tableTop = 110;
     const col = {
-    date: tableLeft,
-    service: tableLeft + 100,
-    total: tableLeft + 220,
-    submittedBy: tableLeft + 300,
-    status: tableLeft + 400,
-    reviewedBy: tableLeft + 480
-}
+      date: tableLeft,
+      service: tableLeft + 100,
+      total: tableLeft + 220,
+      submittedBy: tableLeft + 300,
+      status: tableLeft + 400,
+      reviewedBy: tableLeft + 480,
+    };
     const rowHeight = 20;
 
     // Draw header background
-    doc.rect(tableLeft, tableTop, 560, rowHeight).fill("#4F8EF7")
-    
+    doc.rect(tableLeft, tableTop, 560, rowHeight).fill("#4F8EF7");
 
     // Header text
     doc.fillColor("white").fontSize(9).font("Helvetica-Bold");
@@ -346,9 +345,261 @@ const exportTithesPDF = async (req, res) => {
   }
 };
 
+const exportExpenseExcel = async (req, res) => {
+  try {
+    const { startDate, endDate } = req.query;
+    const filter = {};
+
+    if (startDate && endDate) {
+      filter.date = {
+        $gte: new Date(startDate),
+        $lte: new Date(endDate),
+      };
+    }
+
+    const getExpenseAll = await Expense.find(filter)
+      .populate("category", "name type")
+      .populate("recordedBy", "name role")
+      .populate("linkedId", "pcfNo");
+
+    if (getExpenseAll.length === 0)
+      return res.status(200).json({ message: "Empty" });
+
+    const workBook = new excel.Workbook();
+
+    const worksheet = workBook.addWorksheet("Expense");
+
+    worksheet.columns = [
+      { header: "Date", key: "entryDate", width: 20 },
+      { header: "PCF No. Type", key: "pcfNo", width: 20 },
+      { header: "Category", key: "category", width: 15 },
+      { header: "Amount", key: "amount", width: 20 },
+      { header: "Source", key: "source", width: 15 },
+      { header: "Recorded By", key: "recordedBy", width: 15 },
+    ];
+
+    getExpenseAll.forEach((item) => {
+      worksheet.addRow({
+        entryDate: item.date,
+        pcfNo: item.linkedId?.pcfNo || "N/A",
+        category: item.category?.name || "",
+        amount: item.amount,
+        source: item.source,
+        recordedBy: item.recordedBy?.name || "",
+      });
+    });
+
+    // Una — insert title
+    worksheet.insertRow(1, ["JOSCM Expense Report"]);
+    worksheet.mergeCells("A1:F1");
+    worksheet.getCell("A1").font = { bold: true, size: 14 };
+    worksheet.getCell("A1").alignment = { horizontal: "center" };
+
+    // Pangalawa — style ang header (row 2 na ngayon)
+    worksheet.getRow(2).font = { bold: true, color: { argb: "FFFFFFFF" } };
+    ["A2", "B2", "C2", "D2", "E2", "F2"].forEach((cellRef) => {
+      worksheet.getCell(cellRef).fill = {
+        type: "pattern",
+        pattern: "solid",
+        fgColor: { argb: "FF4F8EF7" },
+      };
+    });
+    worksheet.getRow(2).alignment = { horizontal: "center" };
+
+    // Panghuli — borders
+    worksheet.eachRow((row) => {
+      row.eachCell((cell) => {
+        ((cell.border = {
+          top: { style: "thin" },
+          left: { style: "thin" },
+          bottom: { style: "thin" },
+          right: { style: "thin" },
+        }),
+          (cell.alignment = { horizontal: "center" }));
+      });
+    });
+
+    // Total balance sa baba
+    const lastRow = getExpenseAll.length + 3;
+    worksheet.getCell(`D${lastRow}`).value = {
+      formula: `SUM(D3:D${lastRow - 1})`,
+    };
+    worksheet.getCell(`C${lastRow}`).value = "Total Expenses:";
+
+    res.setHeader(
+      "Content-Type",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    );
+    res.setHeader(
+      "Content-Disposition",
+      "attachment; filename=expense-report.xlsx",
+    );
+    await workBook.xlsx.write(res);
+    res.end();
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: error.message });
+  }
+};
+
+const exportExpensePDF = async (req, res) => {
+  try {
+    const { startDate, endDate } = req.query;
+    const filter = {};
+
+    if (startDate && endDate) {
+      filter.date = {
+        $gte: new Date(startDate),
+        $lte: new Date(endDate),
+      };
+    }
+
+    const getExpenseAll = await Expense.find(filter)
+      .populate("category", "name type")
+      .populate("recordedBy", "name role")
+      .populate("linkedId", "pcfNo");
+
+    if (getExpenseAll.length === 0)
+      return res.status(200).json({ message: "Expense Empty" });
+
+    const doc = new PDFDocument();
+
+    // I-pipe sa response — hindi sa file system
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader(
+      "Content-Disposition",
+      "attachment; filename=expense-report.pdf",
+    );
+    doc.pipe(res);
+
+    // Title
+    doc.fontSize(16).text("Expense Report", { align: "center" });
+    doc.moveDown();
+
+    const tableLeft = 26;
+
+    // Table coordinates
+    const tableTop = 110;
+    const col = {
+      date: tableLeft,
+      pcfNo: tableLeft + 80,
+      category: tableLeft + 160,
+      amount: tableLeft + 280,
+      source: tableLeft + 370,
+      recordedBy: tableLeft + 460,
+    };
+
+    const colWidths = {
+      date: 80,
+      pcfNo: 80,
+      category: 120,
+      amount: 90,
+      source: 90,
+      recordedBy: 50,
+    };
+    const rowHeight = 20;
+
+    // Draw header background
+    doc.rect(tableLeft, tableTop, 560, rowHeight).fill("#4F8EF7");
+
+    // Header text
+    doc.fillColor("white").fontSize(9).font("Helvetica-Bold");
+    centerText(doc, "Entry Date", col.date, colWidths.date, tableTop + 5);
+    centerText(doc, "PCF No.", col.pcfNo, colWidths.pcfNo, tableTop + 5);
+    centerText(doc, "Category", col.category, colWidths.category, tableTop + 5);
+    centerText(doc, "Amount", col.amount, colWidths.amount, tableTop + 5);
+    centerText(doc, "Source", col.source, colWidths.source, tableTop + 5);
+    centerText(
+      doc,
+      "Rec. By",
+      col.recordedBy,
+      colWidths.recordedBy,
+      tableTop + 5,
+    );
+
+    // Data rows
+    doc.font("Helvetica").fillColor("black");
+    getExpenseAll.forEach((item, index) => {
+      const y = tableTop + rowHeight + index * rowHeight;
+
+      if (index % 2 === 0) {
+        doc.rect(tableLeft, y, 560, rowHeight).fill("#f0f4ff");
+      }
+
+      doc.fillColor("black").fontSize(8);
+      // ← palitan mo ang doc.text() ng centerText()
+      centerText(
+        doc,
+        new Date(item.date).toLocaleDateString("en-PH"),
+        col.date,
+        colWidths.date,
+        y + 5,
+      );
+      centerText(
+        doc,
+        item.linkedId?.pcfNo || "N/A",
+        col.pcfNo,
+        colWidths.pcfNo,
+        y + 5,
+      );
+      centerText(
+        doc,
+        item.category?.name || "",
+        col.category,
+        colWidths.category,
+        y + 5,
+      );
+      centerText(
+        doc,
+        item.amount.toLocaleString(),
+        col.amount,
+        colWidths.amount,
+        y + 5,
+      );
+      centerText(doc, item.source, col.source, colWidths.source, y + 5);
+      centerText(
+        doc,
+        item.recordedBy?.name || "",
+        col.recordedBy,
+        colWidths.recordedBy,
+        y + 5,
+      );
+    });
+
+    const lastRowY =
+      tableTop + rowHeight + getExpenseAll.length * rowHeight + 30;
+
+    doc.fontSize(10).text(
+      `Generated: ${new Date().toLocaleDateString("en-PH")}`,
+      tableLeft,
+      lastRowY, // ← x:50 para left aligned
+      { align: "left" },
+    );
+
+    const totalBalance = getExpenseAll.reduce(
+      (sum, item) => sum + item.amount,
+      0,
+    );
+
+    doc.fontSize(10).text(
+      `Total Balance: Php ${totalBalance.toLocaleString()}`,
+      tableLeft,
+      lastRowY + 20, // ← 20px below generated
+      { align: "left" },
+    );
+
+    doc.end();
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: error.message });
+  }
+};
+
 export {
   getTithesReport,
   getExpenseReport,
   exportTithesExcel,
   exportTithesPDF,
+  exportExpenseExcel,
+  exportExpensePDF,
 };
