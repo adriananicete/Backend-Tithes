@@ -319,6 +319,16 @@ const approveRequestForm = async (req, res) => {
       refModel: "RequestForm",
     });
 
+    if(approvedRequestForm.validatedBy) {
+    await sendNotification({
+        userId: approvedRequestForm.validatedBy,
+        message: `Request Form ${approvedRequestForm.rfNo} has been approved`,
+        type: 'info',
+        refId: approvedRequestForm._id,
+        refModel: 'RequestForm'
+    })
+}
+
     res.status(200).json({
       status: "Success",
       message: "Request Form approved",
