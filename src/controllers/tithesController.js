@@ -3,17 +3,29 @@ import { sendNotification } from "../utils/sendNotification.js";
 
 const getAllTithes = async (req, res) => {
   try {
-    const getAllData = await Tithes.find()
+
+    const { startDate, endDate } = req.query;
+    const filter = {};
+
+    if(startDate && endDate) {
+      filter.entryDate = {
+        $gte: new Date(startDate),
+        $lte: new Date(endDate)
+      }
+    }
+    const getAllData = await Tithes.find(filter)
       .populate("submittedBy", "name role")
       .populate("reviewedBy", "name role");
     if (getAllData.length === 0)
       return res.status(404).json({ error: "Tithes is Empty" });
 
+    const tithesTotalBalance = getAllData.reduce((acc, item) => acc + item.total, 0);
+
     res.status(200).json({
       status: "Success",
-      data: {
-        getAllData,
-      },
+      totalBalance: tithesTotalBalance,
+      count: getAllData.length,
+      data: getAllData,
     });
   } catch (error) {
     console.log(error);
