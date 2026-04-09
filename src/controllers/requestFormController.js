@@ -16,7 +16,21 @@ const generateRFNo = async () => {
 
 const getAllRequestForms = async (req, res) => {
   try {
-    const requestForms = await RequestForm.find()
+    const { startDate, endDate, status, rfNo } = req.query;
+    const filter = {};
+
+    if(startDate && endDate) {
+      filter.entryDate = {
+        $gte: new Date(startDate),
+        $lte: new Date(endDate)
+      }
+    }
+
+    if(status) filter.status = status;
+    if(rfNo) filter.rfNo = rfNo;
+    if(req.user.role === 'member') filter.requestedBy = req.user.id;
+
+    const requestForms = await RequestForm.find(filter)
       .populate("requestedBy", "name role")
       .populate("category", "name type")
       .populate("approvedBy", "name role")
