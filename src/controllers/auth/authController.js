@@ -24,6 +24,8 @@ export const userLogin = async (req, res) => {
         status: 'Login Successfull',
         data: {
             id: findUser._id,
+            name: findUser.name,
+            email: findUser.email,
             role: findUser.role
         },
         token: token
