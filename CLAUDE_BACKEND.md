@@ -1,0 +1,759 @@
+# JOSCM Tithes App — Backend Documentation
+
+## Project Overview
+
+JOSCM Tithes App is a **church financial management system** for **Jesus Our Savior Christian Ministries (JOSCM)**. The backend is built with **MERN stack** (MongoDB, Express, React, Node.js) and features a **role-based access control (RBAC)** system that mirrors the church's organizational hierarchy.
+
+**Backend Status: 100% Complete**
+
+---
+
+## Tech Stack
+
+| Technology | Version | Purpose |
+|---|---|---|
+| **Node.js** | v22 | Runtime — `--watch` (no nodemon), `--env-file` (no dotenv) |
+| **Express.js** | v4 | Web framework |
+| **MongoDB** | Latest | NoSQL database |
+| **Mongoose** | v9 | ODM — schemas, models, queries |
+| **bcrypt** | v6 | Password hashing (saltRounds: 10) |
+| **jsonwebtoken** | v9 | JWT auth (expires: 1d) |
+| **cors** | v2 | Cross-origin resource sharing |
+| **ExcelJS** | v4 | Excel (.xlsx) report generation |
+| **PDFKit** | v0.18 | PDF report generation |
+| **cloudinary** | v2 | Cloud image hosting for voucher receipts |
+| **multer** | v1 | Multipart/form-data handling for file uploads |
+| **multer-storage-cloudinary** | v4 | Direct-to-Cloudinary storage engine for multer |
+
+---
+
+## Project Structure
+
+```
+backend/
+├── app.js                     ← Entry point — Express setup, routes, DB connect, listen
+├── package.json               ← type: module, node --watch --env-file=.env app.js
+├── .env                       ← PORT, CONNECTION_STRING, JWT_SECRET_KEY
+├── .gitignore                 ← node_modules, .env, .claude/settings.local.json
+└── src/
+    ├── config/
+    │   ├── db.js              ← connectDB() — mongoose.connect()
+    │   └── cloudinary.js      ← Cloudinary SDK config (CLOUDINARY_NAME, API_KEY, API_SECRET)
+    ├── models/
+    │   ├── User.js
+    │   ├── Category.js
+    │   ├── TithesEntry.js
+    │   ├── RequestForm.js
+    │   ├── Voucher.js
+    │   ├── Expense.js
+    │   └── Notification.js
+    ├── controllers/
+    │   ├── auth/
+    │   │   └── authController.js     ← userLogin, userLogout
+    │   ├── admin/
+    │   │   ├── userController.js     ← getAllUsers, getUser, createUser, updateUser, isActiveUser, deleteUser
+    │   │   └── categoryController.js ← getAllCategories, createCategory, updateCategory, deleteCategory
+    │   ├── userController.js         ← changePassword
+    │   ├── tithesController.js       ← getAllTithes, submitTithes, updateTithes, approveTithes, rejectTithes
+    │   ├── requestFormController.js  ← full RF approval chain (9 functions)
+    │   ├── voucherController.js      ← getAllVouchers, createVoucher (+ autoRecordExpense call)
+    │   ├── expenseController.js      ← getAllExpenses, createManualExpense, autoRecordExpense
+    │   ├── notificationController.js ← getNotifications, markAsRead, markAllAsRead
+    │   └── reportController.js       ← getTithesReport, getExpenseReport, exportTithesExcel, exportTithesPDF, exportExpenseExcel, exportExpensePDF
+    ├── routes/
+    │   ├── auth/
+    │   │   └── authRoutes.js
+    │   ├── admin/
+    │   │   ├── userRoutes.js
+    │   │   └── categoryRoutes.js
+    │   ├── userRoutes.js
+    │   ├── tithesRoutes.js
+    │   ├── requestFormRoutes.js
+    │   ├── voucherRoutes.js
+    │   ├── expenseRoutes.js
+    │   ├── notificationRoutes.js
+    │   └── reportRoutes.js
+    ├── middlewares/
+    │   ├── authMiddleware.js          ← verifyToken — verifies JWT on every protected route
+    │   ├── roleMiddleware.js          ← authorizeRoles(...roles) — checks user role
+    │   └── uploadMiddleware.js        ← multer + CloudinaryStorage — receipts folder, images only, 10MB, max 5 files
+    └── utils/
+        ├── seed.js                    ← seeds initial admin user (Adrian)
+        └── sendNotification.js        ← helper — creates Notification document in DB
+```
+
+---
+
+## Environment Variables (.env)
+
+```properties
+PORT=7001
+CONNECTION_STRING=mongodb://localhost:27017/JOSCM-Tithes
+JWT_SECRET_KEY=your_secret_key_here
+
+# Cloudinary — for voucher receipt uploads
+CLOUDINARY_NAME=your_cloud_name
+CLOUDINARY_API_KEY=your_api_key
+CLOUDINARY_API_SECRET=your_api_secret
+```
+
+**Note:** Local MongoDB used for development. MongoDB Atlas had SSL/TLS issues on Windows with Node.js v22. If using Atlas, add these options to `mongoose.connect()`:
+```js
+{ tlsAllowInvalidCertificates: true, tlsAllowInvalidHostnames: true, ssl: true }
+```
+
+---
+
+## app.js (Entry Point)
+
+```js
+import express from 'express'
+import cors from 'cors'
+import { connectDB } from './src/config/db.js'
+import authRoutes from './src/routes/auth/authRoutes.js'
+import adminUserRoutes from './src/routes/admin/userRoutes.js'
+import userRoutes from './src/routes/userRoutes.js'
+import categoryRoutes from './src/routes/admin/categoryRoutes.js'
+import tithesRoutes from './src/routes/tithesRoutes.js'
+import requestFormRoutes from './src/routes/requestFormRoutes.js'
+import voucherRoutes from './src/routes/voucherRoutes.js'
+import expenseRoutes from './src/routes/expenseRoutes.js'
+import notificationRoutes from './src/routes/notificationRoutes.js'
+import reportRoutes from './src/routes/reportRoutes.js'
+
+const PORT = process.env.PORT || 7002
+const app = express()
+
+app.use(express.json())
+app.use(cors())
+
+app.use('/api/auth', authRoutes)
+app.use('/api/admin/users', adminUserRoutes)
+app.use('/api/admin/categories', categoryRoutes)
+app.use('/api/users', userRoutes)
+app.use('/api/tithes', tithesRoutes)
+app.use('/api/request-form', requestFormRoutes)
+app.use('/api/vouchers', voucherRoutes)
+app.use('/api/expenses', expenseRoutes)
+app.use('/api/notifications', notificationRoutes)
+app.use('/api/reports', reportRoutes)
+
+connectDB().then(() => {
+    app.listen(PORT, () => console.log(`Server is running on port: ${PORT}`))
+})
+```
+
+---
+
+## Roles & Users
+
+| Role | Person | Responsibilities |
+|---|---|---|
+| **admin** | Adrian | Full access — manage users, categories, all endpoints |
+| **do** | Jaymar | Approve/reject tithes entries |
+| **validator** | Dani | Validate RF, create Vouchers (PCF) |
+| **pastor** | Bernie | Final approval of Request Forms |
+| **auditor** | Roselyn | View-only, validate RF, approve RF, export reports |
+| **member** | Berna, Lourdes, Kiya | Submit tithes, create RF, confirm receipt |
+
+---
+
+## Middlewares
+
+### authMiddleware.js — verifyToken
+```js
+export const verifyToken = (req, res, next) => {
+  try {
+    const tokenHeader = req.headers.authorization
+    if (!tokenHeader) return res.status(400).json({ error: 'No token, Access Denied!' })
+    const token = tokenHeader.split(' ')[1]
+    const jwtToken = jwt.verify(token, process.env.JWT_SECRET_KEY)
+    req.user = jwtToken  // { id, role }
+    next()
+  } catch (error) {
+    res.status(401).json({ error: 'Invalid Token' })
+  }
+}
+```
+
+### roleMiddleware.js — authorizeRoles
+```js
+export const authorizeRoles = (...roles) => {
+  return (req, res, next) => {
+    if (!roles.includes(req.user.role))
+      return res.status(403).json({ error: 'Access Denied!' })
+    next()
+  }
+}
+```
+
+**Two layers of role checking:**
+1. `authorizeRoles` middleware — used on admin routes
+2. In-controller role check — used for complex logic (conflict of interest, ownership checks)
+
+---
+
+## Database Schemas
+
+### User.js
+```js
+{
+  name: { type: String, required: true },
+  email: { type: String, required: true, unique: true },
+  password: { type: String, required: true },  // bcrypt hashed
+  role: { type: String, enum: ['admin','do','validator','pastor','auditor','member'], required: true },
+  isActive: { type: Boolean, default: true },
+  timestamps: true
+}
+```
+
+### Category.js
+```js
+{
+  name: { type: String, required: true },
+  type: { type: String, enum: ['rf','expense'] },
+  color: { type: String },
+  isActive: { type: Boolean, default: true },
+  createdBy: { type: ObjectId, ref: 'User' },
+  timestamps: true
+}
+```
+
+### TithesEntry.js
+```js
+{
+  entryDate: { type: Date, required: true },
+  serviceType: { type: String, enum: ['Sunday Service','Special Service','Anniversary Service'], required: true },
+  denominations: [{ bill: Number, qty: Number, subtotal: Number }],
+  total: { type: Number, required: true },
+  remarks: { type: String },
+  submittedBy: { type: ObjectId, ref: 'User' },
+  status: { type: String, enum: ['pending','approved','rejected'], default: 'pending' },
+  reviewedBy: { type: ObjectId, ref: 'User' },
+  reviewedAt: { type: Date },
+  rejectionNote: { type: String },
+  timestamps: true
+}
+```
+
+### RequestForm.js
+```js
+{
+  rfNo: { type: String, required: true, unique: true, index: true },  // RF-0001
+  entryDate: { type: Date, required: true },
+  category: { type: ObjectId, ref: 'Category', required: true },
+  requestedBy: { type: ObjectId, ref: 'User', required: true },
+  estimatedAmount: { type: Number, required: true },
+  remarks: { type: String },  // editable by owner (draft) and by validator at voucher creation
+  status: {
+    type: String,
+    enum: ['draft','submitted','for_approval','approved','rejected','voucher_created','disbursed'],
+    default: 'draft'
+  },
+  attachments: [{ type: String }],  // URLs (reserved — no upload flow yet)
+  validatedBy: { type: ObjectId, ref: 'User' },
+  validatedAt: { type: Date },
+  approvedBy: { type: ObjectId, ref: 'User' },
+  approvedAt: { type: Date },
+  rejectionNote: { type: String },
+  rejectedBy: { type: ObjectId, ref: 'User' },
+  rejectedAt: { type: Date },
+  voucherId: { type: ObjectId, ref: 'Voucher' },
+  timestamps: true
+}
+```
+
+### Voucher.js
+```js
+{
+  pcfNo: { type: String, required: true, unique: true, index: true },  // PCF-0001
+  rfId: { type: ObjectId, ref: 'RequestForm', required: true },
+  date: Date,
+  category: { type: ObjectId, ref: 'Category', required: true },
+  amount: { type: Number, required: true },
+  receipts: [{ type: String }],  // Cloudinary secure URLs (images only, max 5 files, 10MB each)
+  createdBy: { type: ObjectId, ref: 'User' },
+  status: { type: String, default: 'approved' },
+  timestamps: true
+}
+```
+
+### Expense.js
+```js
+{
+  source: { type: String, enum: ['voucher','manual'], required: true },
+  linkedId: { type: ObjectId, ref: 'Voucher' },  // optional, only for voucher source
+  amount: { type: Number, required: true },
+  category: { type: ObjectId, ref: 'Category', required: true },
+  date: { type: Date, required: true },
+  recordedBy: { type: ObjectId, ref: 'User' },
+  timestamps: true
+}
+```
+
+### Notification.js
+```js
+{
+  userId: { type: ObjectId, ref: 'User', required: true },
+  message: { type: String, required: true },
+  type: { type: String, enum: ['approval','rejection','info','reminder'], required: true },
+  refId: { type: ObjectId, required: true },  // polymorphic
+  refModel: { type: String, enum: ['Tithes','RequestForm','Voucher'], required: true },
+  isRead: { type: Boolean, default: false },
+  timestamps: true
+}
+```
+
+---
+
+## API Endpoints
+
+### Auth — `/api/auth`
+```
+POST   /api/auth/login          ← all users — returns JWT token (1 day expiry)
+POST   /api/auth/logout         ← authenticated — client-side logout
+```
+
+**Login payload:**
+```json
+{ "email": "adrian@joscm.com", "password": "admin123" }
+```
+
+**Login response:**
+```json
+{
+  "status": "Login Successfull",
+  "data": { "id": "...", "role": "admin" },
+  "token": "eyJhbGci..."
+}
+```
+
+---
+
+### Users — `/api/users`
+```
+PATCH  /api/users/change-password   ← authenticated (all roles)
+```
+
+**Payload:** `{ "currentPassword": "old", "newPassword": "new" }`
+
+---
+
+### Admin — Users — `/api/admin/users`
+All routes: `verifyToken + authorizeRoles('admin')`
+```
+POST   /api/admin/users                     ← create user
+GET    /api/admin/users                     ← list all (password excluded)
+GET    /api/admin/users/:id                 ← get by ID
+PATCH  /api/admin/users/:id                 ← update info/role
+PATCH  /api/admin/users/:id/deactivate      ← set isActive: false
+DELETE /api/admin/users/:id                 ← delete permanently
+```
+
+**Create user payload:**
+```json
+{ "name": "Jaymar", "email": "jaymar@joscm.com", "password": "pass123", "role": "do" }
+```
+
+---
+
+### Admin — Categories — `/api/admin/categories`
+All routes: `verifyToken + authorizeRoles('admin')`
+```
+POST   /api/admin/categories        ← create (createdBy from JWT)
+GET    /api/admin/categories        ← list all
+PATCH  /api/admin/categories/:id    ← update name, type, color
+DELETE /api/admin/categories/:id    ← delete
+```
+
+**Create category payload:**
+```json
+{ "name": "Events", "type": "rf", "color": "#4f8ef7" }
+```
+
+---
+
+### Tithes — `/api/tithes`
+All routes: `verifyToken`
+```
+POST   /api/tithes              ← all roles — submit tithes (status: pending)
+GET    /api/tithes              ← all roles — date filter: ?startDate=&endDate=
+PATCH  /api/tithes/:id          ← owner only, pending status only
+PATCH  /api/tithes/:id/approve  ← all except submitter (conflict of interest check)
+PATCH  /api/tithes/:id/reject   ← all roles — requires rejectionNote
+```
+
+**Submit tithes payload:**
+```json
+{
+  "entryDate": "2025-12-07",
+  "serviceType": "Sunday Service",
+  "denominations": [
+    { "bill": 1000, "qty": 5, "subtotal": 5000 },
+    { "bill": 500, "qty": 4, "subtotal": 2000 }
+  ],
+  "total": 7000,
+  "remarks": "Sunday tithes"
+}
+```
+
+**GET response includes:**
+- `totalBalance` — sum of all tithes total
+- `count` — number of entries
+- Populated: `submittedBy (name, role)`, `reviewedBy (name, role)`
+
+**Filters available:**
+```
+GET /api/tithes?startDate=2025-12-01&endDate=2025-12-31
+```
+
+---
+
+### Request Form — `/api/request-form`
+All routes: `verifyToken`
+```
+POST   /api/request-form                    ← all roles — create RF (draft, auto rfNo)
+GET    /api/request-form                    ← all roles — member sees own only
+PATCH  /api/request-form/:id               ← owner, draft only
+DELETE /api/request-form/:id               ← owner, draft only
+PATCH  /api/request-form/:id/submit        ← owner
+PATCH  /api/request-form/:id/validate      ← validator, auditor, admin
+PATCH  /api/request-form/:id/approve       ← pastor, auditor, admin
+PATCH  /api/request-form/:id/reject        ← validator, pastor, auditor, admin
+PATCH  /api/request-form/:id/received      ← owner (member confirms receipt)
+```
+
+**Create RF payload:**
+```json
+{
+  "entryDate": "2026-04-01",
+  "category": "<category_id>",
+  "estimatedAmount": 5000,
+  "remarks": "For Sunday youth event supplies"
+}
+```
+
+**Update RF allowed fields (draft only):** `entryDate`, `category`, `estimatedAmount`, `remarks`, `attachments`
+
+**Filters available:**
+```
+GET /api/request-form?startDate=&endDate=&status=approved&rfNo=RF-0001
+```
+
+**Populated fields:** `requestedBy`, `category`, `approvedBy`, `validatedBy`, `voucherId`
+
+**RF Status Flow:**
+```
+draft → submitted → for_approval → approved → voucher_created → disbursed
+                  ↘ rejected (at submitted or for_approval stage)
+```
+
+**Auto-numbering:** RF-0001, RF-0002... (finds last RF sorted by createdAt, increments)
+
+---
+
+### Vouchers — `/api/vouchers`
+All routes: `verifyToken`
+```
+POST   /api/vouchers    ← validator, admin — RF must be approved
+                         — accepts multipart/form-data (receipts files)
+GET    /api/vouchers    ← validator, do, auditor, admin
+```
+
+**Create voucher payload (multipart/form-data):**
+
+| Field | Type | Notes |
+|---|---|---|
+| `rfId` | text | Linked approved RequestForm ID |
+| `category` | text | Category ID — **overrides RF category if different** (Dani aligns) |
+| `amount` | text | Voucher amount |
+| `remarks` | text | Optional — **overrides RF remarks** if provided |
+| `receipts` | file[] | Up to 5 images (jpg/jpeg/png/webp), 10MB each |
+
+**On voucher creation:**
+1. Receipt files uploaded to Cloudinary (folder `joscm/receipts`) — secure URLs saved to `voucher.receipts`
+2. If `category` or `remarks` differs from the linked RF, the RF is **updated to match** — Dani is the source of truth for final alignment
+3. Voucher saved with auto PCF-0001 number
+4. `autoRecordExpense()` called — creates Expense document using the **aligned** category
+5. RF status updated to `voucher_created`; `voucherId` linked
+6. Notification sent to requestedBy
+
+**Why the validator can edit RF category/remarks:**
+Dani (validator) is the one who reconciles the request with the actual expense at voucher time. If the member picked the wrong category or wrote vague remarks, Dani corrects them before the PCF is issued so the ledger stays accurate.
+
+**Auto-numbering:** PCF-0001, PCF-0002... (same pattern as RF)
+
+---
+
+### Expenses — `/api/expenses`
+All routes: `verifyToken`
+```
+GET    /api/expenses    ← auditor, admin
+POST   /api/expenses    ← admin only (manual entry)
+```
+
+**Manual expense payload:**
+```json
+{
+  "amount": 1500,
+  "category": "<category_id>",
+  "date": "2026-04-01"
+}
+```
+
+**Note:** `source` is auto-set — `voucher` for auto-recorded, `manual` for manual entry.
+
+---
+
+### Notifications — `/api/notifications`
+All routes: `verifyToken`
+```
+GET    /api/notifications           ← per user (filtered by JWT userId)
+PATCH  /api/notifications/read-all  ← mark all as read
+PATCH  /api/notifications/:id/read  ← mark single as read (ownership check)
+```
+
+**Note:** `read-all` route must be BEFORE `/:id/read` in router to avoid Express treating "read-all" as an ID.
+
+**Auto-triggered on:**
+| Event | Who gets notified |
+|---|---|
+| Tithes approved | submittedBy |
+| Tithes rejected | submittedBy |
+| RF validated | requestedBy |
+| RF approved | requestedBy + validatedBy |
+| RF rejected | requestedBy |
+| RF received/disbursed | requestedBy |
+| Voucher created | requestedBy of linked RF |
+
+---
+
+### Reports — `/api/reports`
+All routes: `verifyToken`
+```
+GET    /api/reports/tithes                  ← all roles (member sees own only)
+GET    /api/reports/expense                 ← all except member
+GET    /api/reports/tithes/export/excel     ← all roles
+GET    /api/reports/tithes/export/pdf       ← all roles
+GET    /api/reports/expense/export/excel    ← admin, auditor (authorizeRoles)
+GET    /api/reports/expense/export/pdf      ← admin, auditor (authorizeRoles)
+```
+
+**Filters:**
+```
+GET /api/reports/tithes?startDate=2025-12-01&endDate=2025-12-31
+GET /api/reports/expense?startDate=2025-12-01&endDate=2025-12-31
+```
+
+**Excel/PDF exports** — response is binary file download, set these headers:
+```js
+// Excel
+res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+res.setHeader('Content-Disposition', 'attachment; filename=tithes-report.xlsx')
+
+// PDF
+res.setHeader('Content-Type', 'application/pdf')
+res.setHeader('Content-Disposition', 'attachment; filename=tithes-report.pdf')
+```
+
+**Excel features:**
+- Blue header row with white bold text
+- JOSCM title row (merged cells A1:F1)
+- Alternate row colors
+- Status text color (green=approved, yellow=pending, red=rejected)
+- Total Balance formula (SUM) at bottom
+- Center-aligned cells
+
+**PDF features:**
+- Table with blue header
+- Alternate row colors (#f0f4ff)
+- Center-aligned text using custom `centerText()` helper
+- Generated date (left-aligned)
+- Total Balance (left-aligned)
+
+---
+
+## Utils
+
+### sendNotification.js
+```js
+import { Notification } from '../models/Notification.js'
+
+const sendNotification = async ({ userId, message, type, refId, refModel }) => {
+  const createNotif = new Notification({ userId, message, type, refId, refModel })
+  await createNotif.save()
+  return createNotif
+}
+```
+
+### seed.js
+```js
+// Run: node --env-file=.env src/utils/seed.js
+// Creates initial admin user (Adrian)
+```
+
+---
+
+## Key Business Logic
+
+### Conflict of Interest — Tithes
+A user **cannot approve their own tithes entry**:
+```js
+if (finderTithes.submittedBy.toString() === req.user.id)
+  return res.status(400).json({ error: 'Cannot approve your own tithes entry!' })
+```
+
+### Auto-Number Generation
+```js
+// RF Number
+const lastRF = await RequestForm.findOne().sort({ createdAt: -1 })
+const lastNumber = lastRF ? parseInt(lastRF.rfNo.split('-')[1]) : 0
+const newRfNo = `RF-${String(lastNumber + 1).padStart(4, '0')}`
+
+// PCF Number — same pattern with Voucher collection
+```
+
+### Auto-Record Expense
+```js
+// Called inside createVoucher after newVoucher.save()
+const autoRecordExpense = async (newVoucher) => {
+  const newExpense = new Expense({
+    source: 'voucher',
+    linkedId: newVoucher._id,
+    amount: newVoucher.amount,
+    category: newVoucher.category,
+    date: newVoucher.date,
+    recordedBy: newVoucher.createdBy
+  })
+  await newExpense.save()
+}
+```
+
+### Member Filter on RF
+```js
+if (req.user.role === 'member') filter.requestedBy = req.user.id
+```
+
+### runValidators on Updates
+All `findByIdAndUpdate` calls use:
+```js
+{ new: true, runValidators: true }
+```
+
+---
+
+## Status Enums
+
+### users.role
+`admin` | `do` | `validator` | `pastor` | `auditor` | `member`
+
+### tithes.status
+`pending` | `approved` | `rejected`
+
+### tithes.serviceType
+`Sunday Service` | `Special Service` | `Anniversary Service`
+
+### request_forms.status
+`draft` | `submitted` | `for_approval` | `approved` | `rejected` | `voucher_created` | `disbursed`
+
+### categories.type
+`rf` | `expense`
+
+### expenses.source
+`voucher` | `manual`
+
+### notifications.type
+`approval` | `rejection` | `info` | `reminder`
+
+---
+
+## Branch History
+
+| # | Branch | Description |
+|---|---|---|
+| 1 | `feat/project-setup` | app.js, db.js, package.json |
+| 2 | `feat/auth` | login, logout, JWT, verifyToken, authorizeRoles |
+| 3 | `feat/admin-users` | CRUD users, role assignment, deactivate |
+| 4 | `feat/admin-categories` | CRUD categories |
+| 5 | `feat/change-password` | PATCH /api/users/change-password |
+| 6 | `feat/tithes` | submit, get, update, approve, reject + conflict of interest |
+| 7 | `feat/request-form` | full RF approval chain — 9 endpoints |
+| 8 | `feat/voucher` | PCF creation, auto-number, auto-record expense |
+| 9 | `feat/expense` | auto-record on voucher + manual expense |
+| 10 | `feat/notifications` | auto-trigger on every status change |
+| 11 | `feat/reports` | tithes/expense reports + Excel/PDF export |
+| 12 | `feat/expense-export` | expense Excel + PDF export |
+| 13 | `feat/search-filter` | date filter, status filter, rfNo filter, totalBalance |
+| 14 | `feat/voucher-cloudinary-receipts` | Cloudinary upload for voucher receipts; RF `remarks` field; validator can align RF category/remarks on voucher creation |
+
+---
+
+## Running the Project
+
+```bash
+cd backend
+npm install
+node --env-file=.env src/utils/seed.js   # seed admin user
+npm run dev                               # starts on port 7001
+```
+
+**package.json scripts:**
+```json
+{
+  "dev": "node --watch --env-file=.env app.js"
+}
+```
+
+---
+
+## Common Patterns
+
+### Protected Route Pattern
+```js
+router.get('/', verifyToken, getAllTithes)
+router.post('/', verifyToken, submitTithes)
+router.patch('/:id/approve', verifyToken, approveTithes)
+```
+
+### Admin Route Pattern
+```js
+router.post('/', verifyToken, authorizeRoles('admin'), createUser)
+```
+
+### Controller Pattern
+```js
+const functionName = async (req, res) => {
+  try {
+    // 1. Get params/body/user
+    // 2. Validate
+    // 3. Check ownership/role
+    // 4. Check status
+    // 5. DB operation
+    // 6. Send notification (if needed)
+    // 7. Response
+  } catch (error) {
+    console.error(error)
+    res.status(500).json({ error: error.message })
+  }
+}
+```
+
+### Password Handling
+```js
+// Hash on create/update
+const hashedPassword = await bcrypt.hash(password, 10)
+
+// Compare on login/change-password
+const isMatch = await bcrypt.compare(currentPassword, user.password)
+```
+
+### ObjectId Validation
+```js
+if (!mongoose.Types.ObjectId.isValid(id))
+  return res.status(400).json({ error: 'Invalid ID' })
+```
+
+---
+
+*Developed by Adrian Anicete — JOSCM Church Financial Management System*
+*Backend: 100% Complete*
