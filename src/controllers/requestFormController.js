@@ -53,7 +53,7 @@ const getAllRequestForms = async (req, res) => {
 
 const createRequestForm = async (req, res) => {
   try {
-    const { entryDate, category, estimatedAmount, attachments } = req.body;
+    const { entryDate, category, estimatedAmount, attachments, remarks } = req.body;
 
     if (!entryDate)
       return res.status(400).json({ error: "Entry Date required!" });
@@ -78,6 +78,7 @@ const createRequestForm = async (req, res) => {
       estimatedAmount: amount,
       requestedBy: req.user.id,
       attachments: attachments || [],
+      remarks: remarks || '',
     });
 
     await newRequestForm.save();
@@ -148,6 +149,7 @@ const updateRequestForm = async (req, res) => {
       "category",
       "estimatedAmount",
       "attachments",
+      "remarks",
     ];
     const updates = {};
     allowedUpdates.forEach((field) => {
