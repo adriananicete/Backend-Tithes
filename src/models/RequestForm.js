@@ -25,6 +25,9 @@ const requestFormSchema = new mongoose.Schema({
     type: Number,
     required: true,
   },
+  remarks: {
+    type: String,
+  },
   status: {
     type: String,
     enum: [

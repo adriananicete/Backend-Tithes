@@ -1,11 +1,18 @@
 import express from 'express';
 import { verifyToken } from '../middlewares/authMiddleware.js';
+import { uploadReceipts, handleUploadError } from '../middlewares/uploadMiddleware.js';
 import { createVoucher, getAllVouchers } from '../controllers/voucherController.js';
 
 const router = express.Router();
 
 router.get('/', verifyToken, getAllVouchers);
-router.post('/', verifyToken, createVoucher);
+router.post(
+    '/',
+    verifyToken,
+    uploadReceipts.array('receipts', 5),
+    handleUploadError,
+    createVoucher
+);
 
 export default router;
 
