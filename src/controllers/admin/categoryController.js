@@ -4,9 +4,6 @@ const getAllCategories = async (req, res) => {
   try {
     const getAllData = await Category.find();
 
-    if (getAllData.length === 0)
-      return res.status(404).json({ error: "Empty" });
-
     res.status(200).json(getAllData);
   } catch (error) {
     console.log(error);
