@@ -16,8 +16,6 @@ const getAllTithes = async (req, res) => {
     const getAllData = await Tithes.find(filter)
       .populate("submittedBy", "name role")
       .populate("reviewedBy", "name role");
-    if (getAllData.length === 0)
-      return res.status(404).json({ error: "Tithes is Empty" });
 
     const tithesTotalBalance = getAllData.reduce((acc, item) => acc + item.total, 0);
 
