@@ -18,8 +18,6 @@ const getAllExpenses = async (req, res) => {
       })
       .populate("category", "name type")
       .populate("recordedBy", "name role");
-    if (getAllData.length === 0)
-      return res.status(200).json({ message: "Expense Data empty" });
 
     res.status(200).json({
       status: "Success",
