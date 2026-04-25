@@ -37,9 +37,6 @@ const getAllRequestForms = async (req, res) => {
       .populate("validatedBy", "name role")
       .populate("voucherId", "pcfNo amount");
 
-    if (requestForms.length === 0)
-      return res.status(404).json({ error: "Request form empty" });
-
     res.status(200).json({
       status: "Success",
       count: requestForms.length,

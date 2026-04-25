@@ -13,8 +13,6 @@ const getAllVouchers = async (req, res) => {
       .populate("rfId", "rfNo estimatedAmount status remarks")
       .populate("category", "name type")
       .populate("createdBy", "name role");
-    if (getAllVoucher.length <= 0)
-      return res.status(200).json({ message: "Voucher empty" });
 
     res.status(200).json({
       status: "Success",
