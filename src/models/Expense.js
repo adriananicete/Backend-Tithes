@@ -26,6 +26,9 @@ const expenseSchema = new mongoose.Schema({
     recordedBy: {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'User'
+    },
+    remarks: {
+        type: String,
     }
 }, {timestamps: true})
 

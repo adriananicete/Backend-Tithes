@@ -4,7 +4,18 @@ import { Expense } from "../models/Expense.js";
 const getAllExpenses = async (req, res) => {
   try {
     const getAllData = await Expense.find()
-      .populate("linkedId", "pcfNo amount")
+      .populate({
+        path: "linkedId",
+        select: "pcfNo amount rfId",
+        populate: {
+          path: "rfId",
+          select: "rfNo requestedBy approvedBy",
+          populate: [
+            { path: "requestedBy", select: "name" },
+            { path: "approvedBy", select: "name" },
+          ],
+        },
+      })
       .populate("category", "name type")
       .populate("recordedBy", "name role");
     if (getAllData.length === 0)
@@ -25,7 +36,7 @@ const createManualExpense = async (req, res) => {
   try {
 
     if(!['admin'].includes(req.user.role)) return res.status(403).json({ error: 'Only admin can create manual expense' });
-    const { amount, category, date } = req.body;
+    const { amount, category, date, remarks } = req.body;
 
     if(!mongoose.Types.ObjectId.isValid(category)) return res.status(400).json({error: `Invalid Category`});
 
@@ -38,7 +49,8 @@ const createManualExpense = async (req, res) => {
         amount: amount,
         category: category,
         date: date,
-        recordedBy: req.user.id
+        recordedBy: req.user.id,
+        remarks: remarks
     });
 
     await newManualExpense.save()
