@@ -2,6 +2,15 @@ import mongoose from "mongoose";
 import { RequestForm } from "../models/RequestForm.js";
 import { sendNotification } from "../utils/sendNotification.js";
 
+const RF_POPULATE = [
+  { path: "requestedBy", select: "name role" },
+  { path: "category", select: "name type" },
+  { path: "validatedBy", select: "name role" },
+  { path: "approvedBy", select: "name role" },
+  { path: "rejectedBy", select: "name role" },
+  { path: "voucherId", select: "pcfNo amount" },
+];
+
 const generateRFNo = async () => {
   const lastRF = await RequestForm.findOne().sort({ createdAt: -1 });
   let newNumber = 1;
@@ -30,12 +39,7 @@ const getAllRequestForms = async (req, res) => {
     if(rfNo) filter.rfNo = rfNo;
     if(req.user.role === 'member') filter.requestedBy = req.user.id;
 
-    const requestForms = await RequestForm.find(filter)
-      .populate("requestedBy", "name role")
-      .populate("category", "name type")
-      .populate("approvedBy", "name role")
-      .populate("validatedBy", "name role")
-      .populate("voucherId", "pcfNo amount");
+    const requestForms = await RequestForm.find(filter).populate(RF_POPULATE);
 
     res.status(200).json({
       status: "Success",
@@ -111,6 +115,7 @@ const submitRequestForm = async (req, res) => {
         .json({ error: "Only draft requests can be submitted" });
 
     requestForm.status = "submitted";
+    requestForm.submittedAt = Date.now();
     await requestForm.save();
 
     res.status(200).json({
@@ -238,22 +243,10 @@ const validateRequestForm = async (req, res) => {
         },
       },
       { new: true, runValidators: true },
-    )
-      .populate("validatedBy", "name role")
-      .populate("category", "name type");
-
-    const { name: validatedByName, role } = updatedRequestForm.validatedBy;
-    const { name: categoryName, type } = updatedRequestForm.category;
-    const responseData = {
-      rfNo: updatedRequestForm.rfNo,
-      status: updatedRequestForm.status,
-      category: { categoryName, type },
-      validatedAt: updatedRequestForm.validatedAt,
-      validatedBy: { validatedByName, role },
-    };
+    ).populate(RF_POPULATE);
 
     await sendNotification({
-      userId: updatedRequestForm.requestedBy,
+      userId: updatedRequestForm.requestedBy._id,
       message: "Your request entry has been validated",
       type: "info",
       refId: updatedRequestForm._id,
@@ -263,7 +256,7 @@ const validateRequestForm = async (req, res) => {
     res.status(200).json({
       status: "Success",
       message: "Request Form validated",
-      data: responseData,
+      data: updatedRequestForm,
     });
   } catch (error) {
     console.log(error);
@@ -299,39 +292,30 @@ const approveRequestForm = async (req, res) => {
         },
       },
       { new: true, runValidators: true },
-    ).populate("approvedBy", "name role");
-
-    const { name, role } = approvedRequestForm.approvedBy;
-
-    const responseData = {
-      rfNo: approvedRequestForm.rfNo,
-      status: approvedRequestForm.status,
-      approvedAt: approvedRequestForm.approvedAt,
-      approvedBy: { name, role },
-    };
+    ).populate(RF_POPULATE);
 
     await sendNotification({
-      userId: approvedRequestForm.requestedBy,
+      userId: approvedRequestForm.requestedBy._id,
       message: "Your request entry has been approved",
       type: "approval",
       refId: approvedRequestForm._id,
       refModel: "RequestForm",
     });
 
-    if(approvedRequestForm.validatedBy) {
-    await sendNotification({
-        userId: approvedRequestForm.validatedBy,
+    if (approvedRequestForm.validatedBy) {
+      await sendNotification({
+        userId: approvedRequestForm.validatedBy._id,
         message: `Request Form ${approvedRequestForm.rfNo} has been approved`,
-        type: 'info',
+        type: "info",
         refId: approvedRequestForm._id,
-        refModel: 'RequestForm'
-    })
-}
+        refModel: "RequestForm",
+      });
+    }
 
     res.status(200).json({
       status: "Success",
       message: "Request Form approved",
-      data: responseData,
+      data: approvedRequestForm,
     });
   } catch (error) {
     console.log(error);
@@ -370,29 +354,20 @@ const rejectRequestForm = async (req, res) => {
         },
       },
       { new: true, runValidators: true },
-    ).populate("rejectedBy", "name role");
+    ).populate(RF_POPULATE);
 
     await sendNotification({
-      userId: rejectedRequestForm.requestedBy,
+      userId: rejectedRequestForm.requestedBy._id,
       message: "Your request entry has been rejected",
       type: "rejection",
       refId: rejectedRequestForm._id,
       refModel: "RequestForm",
     });
 
-
     res.status(200).json({
       status: "Success",
       message: `Request Form rejected`,
-      data: {
-        rfNo: rejectedRequestForm.rfNo,
-        status: rejectedRequestForm.status,
-        rejectedAt: rejectedRequestForm.rejectedAt,
-        rejectedBy: {
-          name: rejectedRequestForm.rejectedBy.name,
-          role: rejectedRequestForm.rejectedBy.role,
-        },
-      },
+      data: rejectedRequestForm,
     });
   } catch (error) {
     console.log(error);
@@ -424,7 +399,7 @@ const receivedRequestForm = async (req, res) => {
 
     const disbursedRequestForm = await RequestForm.findByIdAndUpdate(
       id,
-      { $set: { status: "disbursed" } },
+      { $set: { status: "disbursed", receivedAt: Date.now() } },
       { new: true, runValidators: true },
     );
 

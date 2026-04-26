@@ -92,6 +92,7 @@ const createVoucher = async (req, res) => {
           ...rfUpdates,
           voucherId: newVoucher._id,
           status: "voucher_created",
+          voucherCreatedAt: Date.now(),
         },
       },
       { new: true, runValidators: true }
