@@ -251,6 +251,7 @@ export const authorizeRoles = (...roles) => {
     default: 'draft'
   },
   attachments: [{ type: String }],  // URLs (reserved — no upload flow yet)
+  submittedAt: { type: Date },
   validatedBy: { type: ObjectId, ref: 'User' },
   validatedAt: { type: Date },
   approvedBy: { type: ObjectId, ref: 'User' },
@@ -259,6 +260,8 @@ export const authorizeRoles = (...roles) => {
   rejectedBy: { type: ObjectId, ref: 'User' },
   rejectedAt: { type: Date },
   voucherId: { type: ObjectId, ref: 'Voucher' },
+  voucherCreatedAt: { type: Date },
+  receivedAt: { type: Date },
   timestamps: true
 }
 ```
@@ -286,6 +289,7 @@ export const authorizeRoles = (...roles) => {
   amount: { type: Number, required: true },
   category: { type: ObjectId, ref: 'Category', required: true },
   date: { type: Date, required: true },
+  remarks: { type: String },
   recordedBy: { type: ObjectId, ref: 'User' },
   timestamps: true
 }
@@ -323,7 +327,7 @@ POST   /api/auth/logout         ← authenticated — client-side logout
 ```json
 {
   "status": "Login Successfull",
-  "data": { "id": "...", "role": "admin" },
+  "data": { "id": "...", "name": "Adrian", "email": "adrian@joscm.com", "role": "admin" },
   "token": "eyJhbGci..."
 }
 ```
@@ -685,6 +689,11 @@ All `findByIdAndUpdate` calls use:
 | 12 | `feat/expense-export` | expense Excel + PDF export |
 | 13 | `feat/search-filter` | date filter, status filter, rfNo filter, totalBalance |
 | 14 | `feat/voucher-cloudinary-receipts` | Cloudinary upload for voucher receipts; RF `remarks` field; validator can align RF category/remarks on voucher creation |
+| 15 | `feat/add-status-notif` | Notify validator when their RF gets approved (extra `sendNotification` call in `approveRequestForm`) |
+| 16 | `feat/expense-remarks-and-deep-populate` | Expense schema gains `remarks`; `getAllExpenses` deep-populates `linkedId → Voucher → rfId → RequestForm → requestedBy/approvedBy` in one trip; `createManualExpense` accepts `remarks` |
+| 17 | `feat/normalize-empty-list-responses` | All list endpoints (categories, users, tithes, RF, vouchers, expenses) return their normal success shape on empty (`200 []` or `200 { count: 0, data: [] }`) instead of `404` with error message |
+| 18 | `feat/rf-timestamps-and-full-response` | RF schema gains `submittedAt` / `voucherCreatedAt` / `receivedAt`; submit / voucher-create / received endpoints write those; `getAllRequestForms` populates `rejectedBy`; validate / approve / reject return the full populated RF (consistent shape with create / update / list) |
+| 19 | `feat/users-create-return-full-user` | `POST /admin/users` returns the saved user (with `_id`, minus password) instead of cherry-picked echo |
 
 ---
 
