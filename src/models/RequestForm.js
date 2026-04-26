@@ -42,6 +42,9 @@ const requestFormSchema = new mongoose.Schema({
     default: 'draft'
   },
   attachments: [{type: String}],
+  submittedAt: {
+    type: Date,
+  },
   validatedBy: {
     type: mongoose.Schema.Types.ObjectId,
     ref: "User",
@@ -60,15 +63,21 @@ const requestFormSchema = new mongoose.Schema({
     type: String,
   },
   rejectedBy: {
-  type: mongoose.Schema.Types.ObjectId,
-  ref: 'User'
-},
-rejectedAt: {
-  type: Date
-},
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User'
+  },
+  rejectedAt: {
+    type: Date
+  },
   voucherId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Voucher'
+  },
+  voucherCreatedAt: {
+    type: Date,
+  },
+  receivedAt: {
+    type: Date,
   },
 }, {timestamps: true});
 
