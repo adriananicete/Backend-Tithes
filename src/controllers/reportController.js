@@ -23,9 +23,6 @@ const getTithesReport = async (req, res) => {
       .populate("submittedBy", "name role")
       .populate("reviewedBy", "name role");
 
-    if (getAllTithes.length === 0)
-      return res.status(200).json({ message: "No Entry Tithes at the moment" });
-
     res.status(200).json({
       status: "Success",
       count: getAllTithes.length,
@@ -57,9 +54,6 @@ const getExpenseReport = async (req, res) => {
       .populate("category", "name type")
       .populate("linkedId", "pcfNo amount");
 
-    if (getAllExpense.length === 0)
-      return res.status(200).json({ message: "No Expense at the moment" });
-
     res.status(200).json({
       status: "Success",
       count: getAllExpense.length,
@@ -86,8 +80,6 @@ const exportTithesExcel = async (req, res) => {
     const generateTithesReport = await Tithes.find(filter)
       .populate("submittedBy", "name role")
       .populate("reviewedBy", "name role");
-    if (generateTithesReport.length === 0)
-      return res.status(200).json({ message: "Tithes Empty" });
 
     const workBook = new excel.Workbook();
 
@@ -157,14 +149,16 @@ const exportTithesExcel = async (req, res) => {
       }
     });
 
-    // Total balance sa baba
-    const lastRow = generateTithesReport.length + 3;
-    worksheet.getCell(`C${lastRow}`).value = {
-      formula: `SUM(C3:C${lastRow - 1})`,
-    };
-    worksheet.getCell(`C${lastRow}`).font = { bold: true };
-    worksheet.getCell(`B${lastRow}`).value = "Total Balance:";
-    worksheet.getCell(`B${lastRow}`).font = { bold: true };
+    // Total balance sa baba (skip if walang rows — SUM(C3:C2) is invalid)
+    if (generateTithesReport.length > 0) {
+      const lastRow = generateTithesReport.length + 3;
+      worksheet.getCell(`C${lastRow}`).value = {
+        formula: `SUM(C3:C${lastRow - 1})`,
+      };
+      worksheet.getCell(`C${lastRow}`).font = { bold: true };
+      worksheet.getCell(`B${lastRow}`).value = "Total Balance:";
+      worksheet.getCell(`B${lastRow}`).font = { bold: true };
+    }
 
     res.setHeader(
       "Content-Type",
@@ -212,8 +206,6 @@ const exportTithesPDF = async (req, res) => {
     const generateTithesReport = await Tithes.find(filter)
       .populate("submittedBy", "name role")
       .populate("reviewedBy", "name role");
-    if (generateTithesReport.length === 0)
-      return res.status(200).json({ message: "Tithes Empty" });
 
     const doc = new PDFDocument();
 
@@ -362,9 +354,6 @@ const exportExpenseExcel = async (req, res) => {
       .populate("recordedBy", "name role")
       .populate("linkedId", "pcfNo");
 
-    if (getExpenseAll.length === 0)
-      return res.status(200).json({ message: "Empty" });
-
     const workBook = new excel.Workbook();
 
     const worksheet = workBook.addWorksheet("Expense");
@@ -419,12 +408,14 @@ const exportExpenseExcel = async (req, res) => {
       });
     });
 
-    // Total balance sa baba
-    const lastRow = getExpenseAll.length + 3;
-    worksheet.getCell(`D${lastRow}`).value = {
-      formula: `SUM(D3:D${lastRow - 1})`,
-    };
-    worksheet.getCell(`C${lastRow}`).value = "Total Expenses:";
+    // Total balance sa baba (skip if walang rows — SUM(D3:D2) is invalid)
+    if (getExpenseAll.length > 0) {
+      const lastRow = getExpenseAll.length + 3;
+      worksheet.getCell(`D${lastRow}`).value = {
+        formula: `SUM(D3:D${lastRow - 1})`,
+      };
+      worksheet.getCell(`C${lastRow}`).value = "Total Expenses:";
+    }
 
     res.setHeader(
       "Content-Type",
@@ -458,9 +449,6 @@ const exportExpensePDF = async (req, res) => {
       .populate("category", "name type")
       .populate("recordedBy", "name role")
       .populate("linkedId", "pcfNo");
-
-    if (getExpenseAll.length === 0)
-      return res.status(200).json({ message: "Expense Empty" });
 
     const doc = new PDFDocument();
 
