@@ -3,9 +3,8 @@ import { Notification } from "../models/Notification.js";
 
 const getNotifications = async (req, res) => {
   try {
-    const getAllNotif = await Notification.find({ userId: req.user.id });
-    if (getAllNotif.length === 0)
-      return res.status(200).json({ message: "Notification Empty" });
+    const getAllNotif = await Notification.find({ userId: req.user.id })
+      .sort({ createdAt: -1 });
 
     res.status(200).json({
       status: "Success",
