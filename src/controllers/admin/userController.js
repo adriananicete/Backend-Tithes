@@ -57,15 +57,12 @@ const createUser = async (req, res) => {
 
     await newUser.save();
 
+    const { password: _password, ...userData } = newUser.toObject();
+
     res.status(201).json({
       status: "Success",
       message: "New user created!",
-      data: {
-        name: name,
-        email: email,
-        isActive: newUser.isActive,
-        role: role,
-      },
+      data: userData,
     });
   } catch (error) {
     console.log(error);
