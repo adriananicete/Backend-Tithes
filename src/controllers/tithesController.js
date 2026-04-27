@@ -1,5 +1,5 @@
 import { Tithes } from "../models/TithesEntry.js";
-import { sendNotification } from "../utils/sendNotification.js";
+import { sendNotification, sendNotificationToRoles } from "../utils/sendNotification.js";
 
 const getAllTithes = async (req, res) => {
   try {
@@ -51,6 +51,15 @@ const submitTithes = async (req, res) => {
       submittedBy: req.user.id,
     });
     await newTithes.save();
+
+    await sendNotificationToRoles({
+      roles: ["do", "auditor", "admin"],
+      message: "A new tithes entry is awaiting approval",
+      type: "info",
+      refId: newTithes._id,
+      refModel: "Tithes",
+      excludeUserId: req.user.id,
+    });
 
     res.status(201).json({
       status: "Success",

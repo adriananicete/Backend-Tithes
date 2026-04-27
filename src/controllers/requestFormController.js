@@ -1,6 +1,6 @@
 import mongoose from "mongoose";
 import { RequestForm } from "../models/RequestForm.js";
-import { sendNotification } from "../utils/sendNotification.js";
+import { sendNotification, sendNotificationToRoles } from "../utils/sendNotification.js";
 
 const RF_POPULATE = [
   { path: "requestedBy", select: "name role" },
@@ -117,6 +117,15 @@ const submitRequestForm = async (req, res) => {
     requestForm.status = "submitted";
     requestForm.submittedAt = Date.now();
     await requestForm.save();
+
+    await sendNotificationToRoles({
+      roles: ["validator", "auditor", "admin"],
+      message: `Request Form ${requestForm.rfNo} is awaiting validation`,
+      type: "info",
+      refId: requestForm._id,
+      refModel: "RequestForm",
+      excludeUserId: req.user.id,
+    });
 
     res.status(200).json({
       status: "Success",
@@ -251,6 +260,15 @@ const validateRequestForm = async (req, res) => {
       type: "info",
       refId: updatedRequestForm._id,
       refModel: "RequestForm",
+    });
+
+    await sendNotificationToRoles({
+      roles: ["pastor", "auditor", "admin"],
+      message: `Request Form ${updatedRequestForm.rfNo} is awaiting approval`,
+      type: "info",
+      refId: updatedRequestForm._id,
+      refModel: "RequestForm",
+      excludeUserId: req.user.id,
     });
 
     res.status(200).json({
