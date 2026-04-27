@@ -5,9 +5,12 @@ import { authorizeRoles } from '../../middlewares/roleMiddleware.js';
 
 const router = express.Router();
 
-// @desc   Get all categories
+// @desc   Get all categories (readable by every authenticated role —
+//         non-admins need this to populate Select dropdowns in
+//         CreateRfDialog / CreateVoucherDialog / RecordExpenseDialog).
+//         Write endpoints below stay admin-only.
 // @routes /api/admin/categories
-router.get('/',verifyToken, authorizeRoles('admin'), getAllCategories);
+router.get('/', verifyToken, getAllCategories);
 
 // @desc   Create new category
 // @routes /api/admin/categories
