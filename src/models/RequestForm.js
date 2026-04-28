@@ -38,6 +38,7 @@ const requestFormSchema = new mongoose.Schema({
       "rejected",
       "voucher_created",
       "disbursed",
+      "received",
     ],
     default: 'draft'
   },
@@ -75,6 +76,17 @@ const requestFormSchema = new mongoose.Schema({
   },
   voucherCreatedAt: {
     type: Date,
+  },
+  disbursedBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+  },
+  disbursedAt: {
+    type: Date,
+  },
+  receivedBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
   },
   receivedAt: {
     type: Date,
