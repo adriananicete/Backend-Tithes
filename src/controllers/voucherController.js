@@ -10,6 +10,7 @@ const getAllVouchers = async (req, res) => {
       return res.status(403).json({ error: "Access Denied" });
 
     const getAllVoucher = await Voucher.find()
+      .sort({ createdAt: -1 })
       .populate("rfId", "rfNo estimatedAmount status remarks")
       .populate("category", "name type")
       .populate("createdBy", "name role");
