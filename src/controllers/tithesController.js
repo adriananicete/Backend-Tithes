@@ -1,4 +1,5 @@
 import { Tithes } from "../models/TithesEntry.js";
+import { Expense } from "../models/Expense.js";
 import { sendNotification, sendNotificationToRoles } from "../utils/sendNotification.js";
 
 const getAllTithes = async (req, res) => {
@@ -14,14 +15,30 @@ const getAllTithes = async (req, res) => {
       }
     }
     const getAllData = await Tithes.find(filter)
+      .sort({ createdAt: -1 })
       .populate("submittedBy", "name role")
       .populate("reviewedBy", "name role");
 
     const tithesTotalBalance = getAllData.reduce((acc, item) => acc + item.total, 0);
 
+    const [approvedAgg, expenseAgg] = await Promise.all([
+      Tithes.aggregate([
+        { $match: { status: "approved" } },
+        { $group: { _id: null, sum: { $sum: "$total" } } },
+      ]),
+      Expense.aggregate([
+        { $group: { _id: null, sum: { $sum: "$amount" } } },
+      ]),
+    ]);
+
+    const totalApproved = approvedAgg[0]?.sum ?? 0;
+    const totalExpenses = expenseAgg[0]?.sum ?? 0;
+    const availableBalance = totalApproved - totalExpenses;
+
     res.status(200).json({
       status: "Success",
       totalBalance: tithesTotalBalance,
+      availableBalance,
       count: getAllData.length,
       data: getAllData,
     });

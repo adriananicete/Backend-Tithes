@@ -8,6 +8,8 @@ const RF_POPULATE = [
   { path: "validatedBy", select: "name role" },
   { path: "approvedBy", select: "name role" },
   { path: "rejectedBy", select: "name role" },
+  { path: "disbursedBy", select: "name role" },
+  { path: "receivedBy", select: "name role" },
   { path: "voucherId", select: "pcfNo amount" },
 ];
 
@@ -39,7 +41,9 @@ const getAllRequestForms = async (req, res) => {
     if(rfNo) filter.rfNo = rfNo;
     if(req.user.role === 'member') filter.requestedBy = req.user.id;
 
-    const requestForms = await RequestForm.find(filter).populate(RF_POPULATE);
+    const requestForms = await RequestForm.find(filter)
+      .sort({ createdAt: -1 })
+      .populate(RF_POPULATE);
 
     res.status(200).json({
       status: "Success",
@@ -393,6 +397,59 @@ const rejectRequestForm = async (req, res) => {
   }
 };
 
+const disburseRequestForm = async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!mongoose.Types.ObjectId.isValid(id))
+      return res.status(400).json({ error: "Bad Request" });
+
+    if (!["admin", "do"].includes(req.user.role))
+      return res
+        .status(403)
+        .json({ error: "Only admin or DO can mark as disbursed" });
+
+    const findRequestFormById = await RequestForm.findById(id);
+    if (!findRequestFormById)
+      return res.status(404).json({ error: "Request form not found" });
+
+    if (findRequestFormById.status !== "voucher_created")
+      return res
+        .status(400)
+        .json({
+          error: "Voucher must be created before marking as disbursed",
+        });
+
+    const disbursedRequestForm = await RequestForm.findByIdAndUpdate(
+      id,
+      {
+        $set: {
+          status: "disbursed",
+          disbursedBy: req.user.id,
+          disbursedAt: Date.now(),
+        },
+      },
+      { new: true, runValidators: true },
+    ).populate(RF_POPULATE);
+
+    await sendNotification({
+      userId: disbursedRequestForm.requestedBy._id,
+      message: `Your request ${disbursedRequestForm.rfNo} has been disbursed. Please confirm receipt.`,
+      type: "info",
+      refId: disbursedRequestForm._id,
+      refModel: "RequestForm",
+    });
+
+    res.status(200).json({
+      status: "Success",
+      message: `${disbursedRequestForm.rfNo} marked as disbursed`,
+      data: disbursedRequestForm,
+    });
+  } catch (error) {
+    console.log(error);
+    res.status(500).json({ error: error.message });
+  }
+};
+
 const receivedRequestForm = async (req, res) => {
   try {
     const { id } = req.params;
@@ -408,30 +465,38 @@ const receivedRequestForm = async (req, res) => {
         .status(403)
         .json({ error: "Only the requestor can confirm receipt" });
 
-    if (findRequestFormById.status !== "approved")
+    if (findRequestFormById.status !== "disbursed")
       return res
         .status(400)
         .json({
-          error: "Request form must be approved before confirming receipt",
+          error: "Request form must be disbursed before confirming receipt",
         });
 
-    const disbursedRequestForm = await RequestForm.findByIdAndUpdate(
+    const receivedForm = await RequestForm.findByIdAndUpdate(
       id,
-      { $set: { status: "disbursed", receivedAt: Date.now() } },
+      {
+        $set: {
+          status: "received",
+          receivedBy: req.user.id,
+          receivedAt: Date.now(),
+        },
+      },
       { new: true, runValidators: true },
-    );
+    ).populate(RF_POPULATE);
 
-    await sendNotification({
-      userId: disbursedRequestForm.requestedBy,
-      message: "Your request entry has been received",
+    await sendNotificationToRoles({
+      roles: ["admin", "auditor"],
+      message: `Request ${receivedForm.rfNo} received by ${receivedForm.requestedBy.name}. Closed.`,
       type: "info",
-      refId: disbursedRequestForm._id,
+      refId: receivedForm._id,
       refModel: "RequestForm",
+      excludeUserId: req.user.id,
     });
 
     res.status(200).json({
       status: "Success",
-      message: `${disbursedRequestForm.rfNo} disbursed successfully`,
+      message: `${receivedForm.rfNo} received successfully`,
+      data: receivedForm,
     });
   } catch (error) {
     console.log(error);
@@ -448,5 +513,6 @@ export {
   validateRequestForm,
   approveRequestForm,
   rejectRequestForm,
+  disburseRequestForm,
   receivedRequestForm,
 };
