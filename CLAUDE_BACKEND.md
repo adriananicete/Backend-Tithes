@@ -55,7 +55,7 @@ backend/
     │   │   └── categoryController.js ← getAllCategories, createCategory, updateCategory, deleteCategory
     │   ├── userController.js         ← changePassword
     │   ├── tithesController.js       ← getAllTithes, submitTithes, updateTithes, approveTithes, rejectTithes
-    │   ├── requestFormController.js  ← full RF approval chain (9 functions)
+    │   ├── requestFormController.js  ← full RF approval chain (10 functions — disburse + received split)
     │   ├── voucherController.js      ← getAllVouchers, createVoucher (+ autoRecordExpense call)
     │   ├── expenseController.js      ← getAllExpenses, createManualExpense, autoRecordExpense
     │   ├── notificationController.js ← getNotifications, markAsRead, markAllAsRead
@@ -247,7 +247,7 @@ export const authorizeRoles = (...roles) => {
   remarks: { type: String },  // editable by owner (draft) and by validator at voucher creation
   status: {
     type: String,
-    enum: ['draft','submitted','for_approval','approved','rejected','voucher_created','disbursed'],
+    enum: ['draft','submitted','for_approval','approved','rejected','voucher_created','disbursed','received'],
     default: 'draft'
   },
   attachments: [{ type: String }],  // URLs (reserved — no upload flow yet)
@@ -261,6 +261,9 @@ export const authorizeRoles = (...roles) => {
   rejectedAt: { type: Date },
   voucherId: { type: ObjectId, ref: 'Voucher' },
   voucherCreatedAt: { type: Date },
+  disbursedBy: { type: ObjectId, ref: 'User' },   // admin/DO who marked it disbursed
+  disbursedAt: { type: Date },
+  receivedBy: { type: ObjectId, ref: 'User' },    // requester who confirmed receipt
   receivedAt: { type: Date },
   timestamps: true
 }
@@ -402,8 +405,10 @@ PATCH  /api/tithes/:id/reject   ← all roles — requires rejectionNote
 ```
 
 **GET response includes:**
-- `totalBalance` — sum of all tithes total
+- `totalBalance` — sum of `total` on the entries returned by the current filter (filter-scoped, kept for back-compat with summary cards)
+- `availableBalance` — true cash-on-hand: `sum(approved tithes total)` − `sum(all expenses)` — ignores the date filter, used by the frontend RF amount-limit guard
 - `count` — number of entries
+- Sort order: newest first (`createdAt: -1`)
 - Populated: `submittedBy (name, role)`, `reviewedBy (name, role)`
 
 **Filters available:**
@@ -424,8 +429,11 @@ PATCH  /api/request-form/:id/submit        ← owner
 PATCH  /api/request-form/:id/validate      ← validator, auditor, admin
 PATCH  /api/request-form/:id/approve       ← pastor, auditor, admin
 PATCH  /api/request-form/:id/reject        ← validator, pastor, auditor, admin
-PATCH  /api/request-form/:id/received      ← owner (member confirms receipt)
+PATCH  /api/request-form/:id/disburse      ← admin, do  (status: voucher_created → disbursed)
+PATCH  /api/request-form/:id/received      ← owner     (status: disbursed → received)
 ```
+
+Sort order on `GET /api/request-form`: newest first (`createdAt: -1`).
 
 **Create RF payload:**
 ```json
@@ -448,9 +456,18 @@ GET /api/request-form?startDate=&endDate=&status=approved&rfNo=RF-0001
 
 **RF Status Flow:**
 ```
-draft → submitted → for_approval → approved → voucher_created → disbursed
+draft → submitted → for_approval → approved → voucher_created → disbursed → received
                   ↘ rejected (at submitted or for_approval stage)
 ```
+
+Each transition's actor:
+- `draft → submitted` — owner
+- `submitted → for_approval` — validator / auditor / admin
+- `for_approval → approved` — pastor / auditor / admin
+- `approved → voucher_created` — validator / admin (via voucher creation; auto-records expense)
+- `voucher_created → disbursed` — **admin / DO** (records that money left the church)
+- `disbursed → received` — **owner / requester** (confirms physical receipt; terminal)
+- `* → rejected` — only valid from `submitted` or `for_approval`
 
 **Auto-numbering:** RF-0001, RF-0002... (finds last RF sorted by createdAt, increments)
 
@@ -522,12 +539,15 @@ PATCH  /api/notifications/:id/read  ← mark single as read (ownership check)
 **Auto-triggered on:**
 | Event | Who gets notified |
 |---|---|
+| Tithes submitted | roles: do, auditor, admin (excluding submitter) |
 | Tithes approved | submittedBy |
 | Tithes rejected | submittedBy |
-| RF validated | requestedBy |
+| RF submitted | roles: validator, auditor, admin (excluding submitter) |
+| RF validated | requestedBy + roles: pastor, auditor, admin (excluding validator) |
 | RF approved | requestedBy + validatedBy |
 | RF rejected | requestedBy |
-| RF received/disbursed | requestedBy |
+| RF disbursed | requestedBy ("please confirm receipt") |
+| RF received | roles: admin, auditor (excluding the requester who confirmed) |
 | Voucher created | requestedBy of linked RF |
 
 ---
@@ -658,7 +678,7 @@ All `findByIdAndUpdate` calls use:
 `Sunday Service` | `Special Service` | `Anniversary Service`
 
 ### request_forms.status
-`draft` | `submitted` | `for_approval` | `approved` | `rejected` | `voucher_created` | `disbursed`
+`draft` | `submitted` | `for_approval` | `approved` | `rejected` | `voucher_created` | `disbursed` | `received`
 
 ### categories.type
 `rf` | `expense`
@@ -697,6 +717,7 @@ All `findByIdAndUpdate` calls use:
 | 20 | `feat/socket-io-notifications` | Socket.IO server replaces 60s frontend polling. `app.js` swaps `app.listen` for `http.createServer(app)` + `new SocketIOServer(httpServer, { cors })`. JWT handshake middleware reads `socket.handshake.auth.token` (same `JWT_SECRET_KEY` as the HTTP middleware), sets `socket.userId = decoded.id`, and on `connection` joins the socket to a room named after that user id. New `src/services/realtime.js` holds a module-scoped `io` reference and exports `emitToUser(userId, event, payload)` so callers don't have to plumb `io` themselves. `src/utils/sendNotification.js` (the funnel for every notification trigger) emits `notification:new` with the saved doc to the recipient's room after the DB insert. No controller changes needed. CORS allowlist + Vercel-preview pattern reused from REST. |
 | 21 | `fix/categories-readable-by-all-roles` | Drop the `authorizeRoles('admin')` guard on `GET /api/admin/categories` only — the write endpoints (POST / PATCH / DELETE) stay admin-only. Non-admin members hitting the Create Request Form modal were getting 403 on the categories fetch, leaving the dropdown empty (looked like a UI bug). Path stays at `/api/admin/categories` so the existing admin Categories management page keeps working without a frontend route change. |
 | 22 | `feat/notify-actors-on-pending-work` | New helper `sendNotificationToRoles({ roles, message, type, refId, refModel, excludeUserId })` in `src/utils/sendNotification.js` finds all active users in the given roles and fans out per-user `sendNotification` calls (each writing the doc + emitting via Socket.IO). `excludeUserId` skips the actor so an admin who validates their own RF doesn't notify themselves through the pastor/auditor/admin path. **Wired into 3 sites**: `submitTithes` → `['do', 'auditor', 'admin']`, `submitRequestForm` → `['validator', 'auditor', 'admin']` (message includes `rfNo`), `validateRequestForm` → also `['pastor', 'auditor', 'admin']` (in addition to existing notif back to requester). Closes the gap where the original notification design only fired "result back to actor" events — nothing pinged the next-step actors when work landed in their queue. |
+| 23 | `feat/disburse-status-flow` | Splits the RF disbursement transition into two distinct actions for proper audit trail. **Status enum gains `received`** as the new terminal state. **New `PATCH /api/request-form/:id/disburse`** (admin/DO only): `voucher_created → disbursed`, sets `disbursedBy`/`disbursedAt`, notifies the requester. **Reshaped `PATCH /:id/received`** (owner only): now requires the RF be in `disbursed` status (was incorrectly checking `approved` — a long-standing inconsistency with the frontend, which never matched), transitions to `received`, sets `receivedBy`/`receivedAt`, fans out a notification to `['admin','auditor']` (excluding the actor) so oversight knows the case is closed. RF schema gains `disbursedBy` / `disbursedAt` / `receivedBy`. RF_POPULATE in the controller now pulls both new ref fields. **Sort order added** to `getAllRequestForms` / `getAllTithes` / `getAllVouchers` — all use `.sort({ createdAt: -1 })` so newest entries appear first (was MongoDB default ascending insertion order — UX complaint that new entries were "going to the bottom"). **`getAllTithes` returns a new `availableBalance` field** computed via two parallel aggregates: `sum(approved Tithes.total) − sum(Expense.amount)`, ignores the date filter (it's the church's true cash-on-hand for the RF amount-limit guard on the frontend). The existing filter-scoped `totalBalance` is kept for back-compat with summary cards. **Why two-step finish:** disbursement is an explicit operational action (admin/DO logs that money physically left the church) and receipt is a separate confirmation by the requester. Future audit reports can join on `disbursedBy`/`disbursedAt` vs `receivedBy`/`receivedAt` for true accountability. |
 
 ---
 
