@@ -11,7 +11,11 @@ const getAllVouchers = async (req, res) => {
 
     const getAllVoucher = await Voucher.find()
       .sort({ createdAt: -1 })
-      .populate("rfId", "rfNo estimatedAmount status remarks")
+      .populate({
+        path: "rfId",
+        select: "rfNo estimatedAmount status remarks requestedBy",
+        populate: { path: "requestedBy", select: "name" },
+      })
       .populate("category", "name type")
       .populate("createdBy", "name role");
 
