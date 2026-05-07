@@ -489,7 +489,7 @@ GET    /api/vouchers    ← validator, do, auditor, admin
 | `category` | text | Category ID — **overrides RF category if different** (Dani aligns) |
 | `amount` | text | Voucher amount |
 | `remarks` | text | Optional — **overrides RF remarks** if provided |
-| `receipts` | file[] | Up to 5 images (jpg/jpeg/png/webp), 10MB each |
+| `receipts` | file[] | **Required** — at least 1 image (jpg/jpeg/png/webp), up to 5 files, 10MB each |
 
 **On voucher creation:**
 1. Receipt files uploaded to Cloudinary (folder `joscm/receipts`) — secure URLs saved to `voucher.receipts`
