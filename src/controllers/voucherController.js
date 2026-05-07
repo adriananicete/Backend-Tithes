@@ -57,7 +57,10 @@ const createVoucher = async (req, res) => {
     if (findRequestFormbyId.voucherId)
       return res.status(400).json({ error: "Voucher already created" });
 
-    const receiptUrls = (req.files || []).map((file) => file.path);
+    if (!req.files || req.files.length === 0)
+      return res.status(400).json({ error: "At least one receipt is required" });
+
+    const receiptUrls = req.files.map((file) => file.path);
 
     const rfUpdates = {};
     if (category !== findRequestFormbyId.category.toString())
