@@ -2,7 +2,7 @@ import mongoose from "mongoose";
 import { RequestForm } from "../models/RequestForm.js";
 import { Voucher } from "../models/Voucher.js";
 import { autoRecordExpense } from "../utils/autoRecordExpense.js";
-import { sendNotification } from "../utils/sendNotification.js";
+import { sendNotification, sendNotificationToRoles } from "../utils/sendNotification.js";
 
 const getAllVouchers = async (req, res) => {
   try {
@@ -109,6 +109,15 @@ const createVoucher = async (req, res) => {
       type: "info",
       refId: vouch._id,
       refModel: "Voucher",
+    });
+
+    await sendNotificationToRoles({
+      roles: ["do", "auditor", "admin"],
+      message: `Voucher ${newVoucher.pcfNo} created for ${vouch.rfNo}`,
+      type: "info",
+      refId: newVoucher._id,
+      refModel: "Voucher",
+      excludeUserId: req.user.id,
     });
 
     res.status(200).json({
