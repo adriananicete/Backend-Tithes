@@ -548,7 +548,7 @@ PATCH  /api/notifications/:id/read  ← mark single as read (ownership check)
 | RF rejected | requestedBy |
 | RF disbursed | requestedBy ("please confirm receipt") |
 | RF received | roles: admin, auditor (excluding the requester who confirmed) |
-| Voucher created | requestedBy of linked RF |
+| Voucher created | requestedBy of linked RF + roles: do, auditor, admin (excluding creator) |
 
 ---
 
