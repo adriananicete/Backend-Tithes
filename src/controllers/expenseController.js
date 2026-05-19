@@ -30,6 +30,48 @@ const getAllExpenses = async (req, res) => {
   }
 };
 
+// Category totals for the last 6 months. Aggregated only (no per-expense
+// detail) so it is safe to expose to every authenticated role for the
+// Dashboard's "Expenses by Category" chart — unlike getAllExpenses, which
+// returns full records (amounts, dates, recordedBy, linked voucher/RF).
+const getExpensesByCategory = async (req, res) => {
+  try {
+    const sixMonthsAgo = new Date();
+    sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
+
+    const data = await Expense.aggregate([
+      { $match: { date: { $gte: sixMonthsAgo } } },
+      { $group: { _id: "$category", amount: { $sum: "$amount" } } },
+      {
+        $lookup: {
+          from: "categories",
+          localField: "_id",
+          foreignField: "_id",
+          as: "category",
+        },
+      },
+      { $unwind: { path: "$category", preserveNullAndEmptyArrays: true } },
+      {
+        $project: {
+          _id: 0,
+          category: { $ifNull: ["$category.name", "Uncategorized"] },
+          amount: 1,
+        },
+      },
+      { $sort: { amount: -1 } },
+    ]);
+
+    res.status(200).json({
+      status: "Success",
+      count: data.length,
+      data,
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: error.message });
+  }
+};
+
 const createManualExpense = async (req, res) => {
   try {
 
@@ -66,4 +108,4 @@ const createManualExpense = async (req, res) => {
   }
 };
 
-export { getAllExpenses, createManualExpense };
+export { getAllExpenses, getExpensesByCategory, createManualExpense };
