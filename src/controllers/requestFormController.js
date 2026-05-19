@@ -1,6 +1,7 @@
 import mongoose from "mongoose";
 import { RequestForm } from "../models/RequestForm.js";
 import { sendNotification, sendNotificationToRoles } from "../utils/sendNotification.js";
+import { parseDate } from "../utils/validate.js";
 
 const RF_POPULATE = [
   { path: "requestedBy", select: "name role" },
@@ -30,11 +31,12 @@ const getAllRequestForms = async (req, res, next) => {
     const { startDate, endDate, status, rfNo } = req.query;
     const filter = {};
 
-    if(startDate && endDate) {
-      filter.entryDate = {
-        $gte: new Date(startDate),
-        $lte: new Date(endDate)
-      }
+    if (startDate && endDate) {
+      const start = parseDate(startDate);
+      const end = parseDate(endDate);
+      if (!start || !end)
+        return res.status(400).json({ error: "Invalid startDate or endDate" });
+      filter.entryDate = { $gte: start, $lte: end };
     }
 
     if(status) filter.status = status;
