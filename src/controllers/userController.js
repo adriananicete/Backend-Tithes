@@ -1,7 +1,7 @@
 import { User } from "../models/User.js";
 import bcrypt from 'bcrypt';
 
-export const changePassword = async (req, res) => {
+export const changePassword = async (req, res, next) => {
     try {
 
         const { id } = req.user;
@@ -24,7 +24,6 @@ export const changePassword = async (req, res) => {
             message: 'Password Changed!',
         });
     } catch (error) {
-        console.log(error);
-        res.status(500).json({error: error.message});
+        next(error);
     }
 }

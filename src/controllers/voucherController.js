@@ -4,7 +4,7 @@ import { Voucher } from "../models/Voucher.js";
 import { autoRecordExpense } from "../utils/autoRecordExpense.js";
 import { sendNotification, sendNotificationToRoles } from "../utils/sendNotification.js";
 
-const getAllVouchers = async (req, res) => {
+const getAllVouchers = async (req, res, next) => {
   try {
     if (!["validator", "do", "auditor", "admin"].includes(req.user.role))
       return res.status(403).json({ error: "Access Denied" });
@@ -25,12 +25,11 @@ const getAllVouchers = async (req, res) => {
       data: getAllVoucher,
     });
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: error.message });
+    next(error);
   }
 };
 
-const createVoucher = async (req, res) => {
+const createVoucher = async (req, res, next) => {
   try {
     if (!["validator", "admin"].includes(req.user.role))
       return res.status(403).json({ error: "Unauthorized" });
@@ -129,8 +128,7 @@ const createVoucher = async (req, res) => {
       data: newVoucher,
     });
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: error.message });
+    next(error);
   }
 };
 

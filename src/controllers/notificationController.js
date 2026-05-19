@@ -1,7 +1,7 @@
 import mongoose from "mongoose";
 import { Notification } from "../models/Notification.js";
 
-const getNotifications = async (req, res) => {
+const getNotifications = async (req, res, next) => {
   try {
     const getAllNotif = await Notification.find({ userId: req.user.id })
       .sort({ createdAt: -1 });
@@ -12,12 +12,11 @@ const getNotifications = async (req, res) => {
       data: getAllNotif,
     });
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: error.message });
+    next(error);
   }
 };
 
-const markAsRead = async (req, res) => {
+const markAsRead = async (req, res, next) => {
   try {
     const { id } = req.params;
     if (!mongoose.Types.ObjectId.isValid(id))
@@ -41,12 +40,11 @@ const markAsRead = async (req, res) => {
       message: "Mark as read",
     });
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: error.message });
+    next(error);
   }
 };
 
-const markAllAsRead = async (req, res) => {
+const markAllAsRead = async (req, res, next) => {
   try {
     await Notification.updateMany(
       { userId: req.user.id, isRead: false },
@@ -59,8 +57,7 @@ const markAllAsRead = async (req, res) => {
     });
     
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: error.message });
+    next(error);
   }
 };
 

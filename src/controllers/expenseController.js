@@ -1,7 +1,7 @@
 import mongoose from "mongoose";
 import { Expense } from "../models/Expense.js";
 
-const getAllExpenses = async (req, res) => {
+const getAllExpenses = async (req, res, next) => {
   try {
     const getAllData = await Expense.find()
       .populate({
@@ -25,8 +25,7 @@ const getAllExpenses = async (req, res) => {
       data: getAllData,
     });
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: error.message });
+    next(error);
   }
 };
 
@@ -34,7 +33,7 @@ const getAllExpenses = async (req, res) => {
 // detail) so it is safe to expose to every authenticated role for the
 // Dashboard's "Expenses by Category" chart — unlike getAllExpenses, which
 // returns full records (amounts, dates, recordedBy, linked voucher/RF).
-const getExpensesByCategory = async (req, res) => {
+const getExpensesByCategory = async (req, res, next) => {
   try {
     const sixMonthsAgo = new Date();
     sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
@@ -67,12 +66,11 @@ const getExpensesByCategory = async (req, res) => {
       data,
     });
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: error.message });
+    next(error);
   }
 };
 
-const createManualExpense = async (req, res) => {
+const createManualExpense = async (req, res, next) => {
   try {
 
     if(!['admin'].includes(req.user.role)) return res.status(403).json({ error: 'Only admin can create manual expense' });
@@ -103,8 +101,7 @@ const createManualExpense = async (req, res) => {
 
 
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: error.message });
+    next(error);
   }
 };
 

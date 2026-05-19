@@ -4,7 +4,7 @@ import { sendNotification, sendNotificationToRoles } from "../utils/sendNotifica
 
 const REVIEWER_ROLES = ["do", "auditor", "admin"];
 
-const getAllTithes = async (req, res) => {
+const getAllTithes = async (req, res, next) => {
   try {
 
     const { startDate, endDate } = req.query;
@@ -45,12 +45,11 @@ const getAllTithes = async (req, res) => {
       data: getAllData,
     });
   } catch (error) {
-    console.log(error);
-    res.status(500).json({ error: error.message });
+    next(error);
   }
 };
 
-const submitTithes = async (req, res) => {
+const submitTithes = async (req, res, next) => {
   try {
     const {
       body: { entryDate, serviceType, denominations, total },
@@ -88,12 +87,11 @@ const submitTithes = async (req, res) => {
       },
     });
   } catch (error) {
-    console.log(error);
-    res.status(500).json({ error: error.message });
+    next(error);
   }
 };
 
-const approveTithes = async (req, res) => {
+const approveTithes = async (req, res, next) => {
   try {
     const { id } = req.params;
 
@@ -141,12 +139,11 @@ const approveTithes = async (req, res) => {
       message: "Tithes Entry Approved!",
     });
   } catch (error) {
-    console.log(error);
-    res.status(500).json({ error: error.message });
+    next(error);
   }
 };
 
-const rejectTithes = async (req, res) => {
+const rejectTithes = async (req, res, next) => {
   try {
     const { id } = req.params;
     const { rejectionNote } = req.body;
@@ -195,12 +192,11 @@ const rejectTithes = async (req, res) => {
       message: "Tithes Entry Rejected",
     });
   } catch (error) {
-    console.log(error);
-    res.status(500).json({ error: error.message });
+    next(error);
   }
 };
 
-const updateTithes = async (req, res) => {
+const updateTithes = async (req, res, next) => {
   try {
     const { id } = req.params;
     const { body } = req;
@@ -229,8 +225,7 @@ const updateTithes = async (req, res) => {
       message: "Tithes Entry Updated",
     });
   } catch (error) {
-    console.log(error);
-    res.status(500).json({ error: error.message });
+    next(error);
   }
 };
 

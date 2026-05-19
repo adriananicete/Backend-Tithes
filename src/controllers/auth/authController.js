@@ -2,7 +2,7 @@ import jwt from 'jsonwebtoken';
 import bcrypt from 'bcrypt';
 import { User } from '../../models/User.js';
 
-export const userLogin = async (req, res) => {
+export const userLogin = async (req, res, next) => {
     const { email, password } = req.body;
 
     try {
@@ -31,13 +31,12 @@ export const userLogin = async (req, res) => {
         token: token
     });
     } catch (error) {
-        console.log(error);
-        res.status(500).json({error: 'Internal Server Error'});
+        next(error);
     }
 
 };
 
-export const userLogout = async (req, res) => {
+export const userLogout = async (req, res, next) => {
     res.status(200).json({
         status: 'Success',
         data: {

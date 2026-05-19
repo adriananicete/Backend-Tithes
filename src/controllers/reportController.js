@@ -3,7 +3,7 @@ import { Tithes } from "../models/TithesEntry.js";
 import PDFDocument from "pdfkit";
 import excel from "exceljs";
 
-const getTithesReport = async (req, res) => {
+const getTithesReport = async (req, res, next) => {
   try {
     const { startDate, endDate } = req.query;
     const filter = {};
@@ -29,12 +29,11 @@ const getTithesReport = async (req, res) => {
       data: getAllTithes,
     });
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: error.message });
+    next(error);
   }
 };
 
-const getExpenseReport = async (req, res) => {
+const getExpenseReport = async (req, res, next) => {
   try {
     if (req.user.role === "member")
       return res.status(403).json({ error: "Forbidden" });
@@ -60,12 +59,11 @@ const getExpenseReport = async (req, res) => {
       data: getAllExpense,
     });
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: error.message });
+    next(error);
   }
 };
 
-const exportTithesExcel = async (req, res) => {
+const exportTithesExcel = async (req, res, next) => {
   try {
     const { startDate, endDate } = req.query;
     const filter = {};
@@ -171,8 +169,7 @@ const exportTithesExcel = async (req, res) => {
     await workBook.xlsx.write(res);
     res.end();
   } catch (error) {
-    console.error(error);
-    res.status(500).json(error.message);
+    next(error);
   }
 };
 
@@ -191,7 +188,7 @@ const colWidths = {
   reviewedBy: 100,
 };
 
-const exportTithesPDF = async (req, res) => {
+const exportTithesPDF = async (req, res, next) => {
   try {
     const { startDate, endDate } = req.query;
     const filter = {};
@@ -332,12 +329,11 @@ const exportTithesPDF = async (req, res) => {
 
     doc.end();
   } catch (error) {
-    console.error(error);
-    res.status(500).json(error.message);
+    next(error);
   }
 };
 
-const exportExpenseExcel = async (req, res) => {
+const exportExpenseExcel = async (req, res, next) => {
   try {
     const { startDate, endDate } = req.query;
     const filter = {};
@@ -428,12 +424,11 @@ const exportExpenseExcel = async (req, res) => {
     await workBook.xlsx.write(res);
     res.end();
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: error.message });
+    next(error);
   }
 };
 
-const exportExpensePDF = async (req, res) => {
+const exportExpensePDF = async (req, res, next) => {
   try {
     const { startDate, endDate } = req.query;
     const filter = {};
@@ -578,8 +573,7 @@ const exportExpensePDF = async (req, res) => {
 
     doc.end();
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: error.message });
+    next(error);
   }
 };
 
