@@ -2,6 +2,8 @@ import { Tithes } from "../models/TithesEntry.js";
 import { Expense } from "../models/Expense.js";
 import { sendNotification, sendNotificationToRoles } from "../utils/sendNotification.js";
 
+const REVIEWER_ROLES = ["do", "auditor", "admin"];
+
 const getAllTithes = async (req, res) => {
   try {
 
@@ -99,6 +101,11 @@ const approveTithes = async (req, res) => {
     if (!finderTithes)
       return res.status(404).json({ error: "Tithes Entry not found!" });
 
+    if (!REVIEWER_ROLES.includes(req.user.role))
+      return res
+        .status(403)
+        .json({ error: "You do not have permission to review tithes" });
+
     if (finderTithes.submittedBy.toString() === req.user.id)
       return res
         .status(400)
@@ -147,6 +154,11 @@ const rejectTithes = async (req, res) => {
     const findTithes = await Tithes.findById(id);
     if (!findTithes)
       return res.status(404).json({ error: "Tithes Entry not Found" });
+
+    if (!REVIEWER_ROLES.includes(req.user.role))
+      return res
+        .status(403)
+        .json({ error: "You do not have permission to review tithes" });
 
     if (findTithes.status === "approved")
       return res.status(400).json({ error: "Already approved" });
