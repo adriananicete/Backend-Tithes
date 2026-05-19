@@ -32,4 +32,9 @@ const expenseSchema = new mongoose.Schema({
     }
 }, {timestamps: true})
 
+// getExpensesByCategory matches `date` (last 6 months) then groups by
+// `category`; the report endpoints filter `date` range.
+expenseSchema.index({ date: 1 });
+expenseSchema.index({ category: 1 });
+
 export const Expense = mongoose.model('Expense', expenseSchema);

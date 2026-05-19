@@ -93,6 +93,12 @@ const requestFormSchema = new mongoose.Schema({
   },
 }, {timestamps: true});
 
+// getAllRequestForms filters by status, entryDate range, and requestedBy
+// (member-role scoping), sorting by createdAt. rfNo is already indexed.
+requestFormSchema.index({ status: 1, createdAt: -1 });
+requestFormSchema.index({ entryDate: 1 });
+requestFormSchema.index({ requestedBy: 1 });
+
 export const RequestForm  = mongoose.model(
   "RequestForm",
   requestFormSchema,
