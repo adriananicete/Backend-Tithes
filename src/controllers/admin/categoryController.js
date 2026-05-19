@@ -1,17 +1,16 @@
 import { Category } from "../../models/Category.js";
 
-const getAllCategories = async (req, res) => {
+const getAllCategories = async (req, res, next) => {
   try {
     const getAllData = await Category.find();
 
     res.status(200).json(getAllData);
   } catch (error) {
-    console.log(error);
-    res.status(500).json({ error: error.message });
+    next(error);
   }
 };
 
-const createCategory = async (req, res) => {
+const createCategory = async (req, res, next) => {
   try {
     const { name, type, color } = req.body;
     const createdBy = req.user.id;
@@ -37,14 +36,11 @@ const createCategory = async (req, res) => {
       },
     });
   } catch (error) {
-    console.log(error);
-    res.status(500).json({
-      error: error.message,
-    });
+    next(error);
   }
 };
 
-const updateCategory = async (req, res) => {
+const updateCategory = async (req, res, next) => {
   try {
     const { id } = req.params;
     const { name, type, color } = req.body;
@@ -69,14 +65,11 @@ const updateCategory = async (req, res) => {
       },
     });
   } catch (error) {
-    console.log(error);
-    res.status(500).json({
-      error: error.message,
-    });
+    next(error);
   }
 };
 
-const deleteCategory = async (req, res) => {
+const deleteCategory = async (req, res, next) => {
   try {
     const { id } = req.params;
 
@@ -89,10 +82,7 @@ const deleteCategory = async (req, res) => {
       message: "Category Deleted!",
     });
   } catch (error) {
-    console.log(error);
-    res.status(500).json({
-      error: error.message,
-    });
+    next(error);
   }
 };
 

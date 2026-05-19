@@ -25,7 +25,7 @@ const generateRFNo = async () => {
   return `RF-${String(newNumber).padStart(4, "0")}`;
 };
 
-const getAllRequestForms = async (req, res) => {
+const getAllRequestForms = async (req, res, next) => {
   try {
     const { startDate, endDate, status, rfNo } = req.query;
     const filter = {};
@@ -51,12 +51,11 @@ const getAllRequestForms = async (req, res) => {
       data: requestForms,
     });
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: error.message });
+    next(error);
   }
 };
 
-const createRequestForm = async (req, res) => {
+const createRequestForm = async (req, res, next) => {
   try {
     const { entryDate, category, estimatedAmount, attachments, remarks } = req.body;
 
@@ -94,12 +93,11 @@ const createRequestForm = async (req, res) => {
       data: newRequestForm,
     });
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: error.message });
+    next(error);
   }
 };
 
-const submitRequestForm = async (req, res) => {
+const submitRequestForm = async (req, res, next) => {
   try {
     const { id } = req.params;
 
@@ -137,12 +135,11 @@ const submitRequestForm = async (req, res) => {
       data: requestForm,
     });
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: error.message });
+    next(error);
   }
 };
 
-const updateRequestForm = async (req, res) => {
+const updateRequestForm = async (req, res, next) => {
   try {
     const { id } = req.params;
     if (!mongoose.Types.ObjectId.isValid(id))
@@ -195,12 +192,11 @@ const updateRequestForm = async (req, res) => {
       data: updatedRequestForm,
     });
   } catch (error) {
-    console.log(error);
-    res.status(500).json({ error: error.message });
+    next(error);
   }
 };
 
-const deleteRequestForm = async (req, res) => {
+const deleteRequestForm = async (req, res, next) => {
   try {
     const { id } = req.params;
     if (!mongoose.Types.ObjectId.isValid(id))
@@ -223,12 +219,11 @@ const deleteRequestForm = async (req, res) => {
       message: "Request Form deleted successfully",
     });
   } catch (error) {
-    console.log(error);
-    res.status(500).json({ error: error.message });
+    next(error);
   }
 };
 
-const validateRequestForm = async (req, res) => {
+const validateRequestForm = async (req, res, next) => {
   try {
     const { id } = req.params;
     if (!mongoose.Types.ObjectId.isValid(id))
@@ -287,12 +282,11 @@ const validateRequestForm = async (req, res) => {
       data: updatedRequestForm,
     });
   } catch (error) {
-    console.log(error);
-    res.status(500).json({ error: error.message });
+    next(error);
   }
 };
 
-const approveRequestForm = async (req, res) => {
+const approveRequestForm = async (req, res, next) => {
   try {
     const { id } = req.params;
     if (!mongoose.Types.ObjectId.isValid(id))
@@ -352,12 +346,11 @@ const approveRequestForm = async (req, res) => {
       data: approvedRequestForm,
     });
   } catch (error) {
-    console.log(error);
-    res.status(500).json({ error: error.message });
+    next(error);
   }
 };
 
-const rejectRequestForm = async (req, res) => {
+const rejectRequestForm = async (req, res, next) => {
   try {
     const { id } = req.params;
     if (!mongoose.Types.ObjectId.isValid(id))
@@ -410,12 +403,11 @@ const rejectRequestForm = async (req, res) => {
       data: rejectedRequestForm,
     });
   } catch (error) {
-    console.log(error);
-    res.status(500).json({ error: error.message });
+    next(error);
   }
 };
 
-const disburseRequestForm = async (req, res) => {
+const disburseRequestForm = async (req, res, next) => {
   try {
     const { id } = req.params;
     if (!mongoose.Types.ObjectId.isValid(id))
@@ -463,12 +455,11 @@ const disburseRequestForm = async (req, res) => {
       data: disbursedRequestForm,
     });
   } catch (error) {
-    console.log(error);
-    res.status(500).json({ error: error.message });
+    next(error);
   }
 };
 
-const receivedRequestForm = async (req, res) => {
+const receivedRequestForm = async (req, res, next) => {
   try {
     const { id } = req.params;
     if (!mongoose.Types.ObjectId.isValid(id))
@@ -517,8 +508,7 @@ const receivedRequestForm = async (req, res) => {
       data: receivedForm,
     });
   } catch (error) {
-    console.log(error);
-    res.status(500).json({ error: error.message });
+    next(error);
   }
 };
 

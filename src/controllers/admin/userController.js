@@ -1,18 +1,17 @@
 import bcrypt from "bcrypt";
 import { User } from "../../models/User.js";
 
-const getAllUsers = async (req, res) => {
+const getAllUsers = async (req, res, next) => {
   try {
     const allUsers = await User.find().select("-password");
 
     res.status(200).json(allUsers);
   } catch (error) {
-    console.log(error);
-    res.status(500).json({ error: error.message });
+    next(error);
   }
 };
 
-const getUser = async (req, res) => {
+const getUser = async (req, res, next) => {
   try {
     const { id } = req.params;
 
@@ -27,12 +26,11 @@ const getUser = async (req, res) => {
       },
     });
   } catch (error) {
-    console.log(error);
-    res.status(500).json({ error: error.message });
+    next(error);
   }
 };
 
-const createUser = async (req, res) => {
+const createUser = async (req, res, next) => {
   try {
     const { name, email, password, role } = req.body;
 
@@ -65,12 +63,11 @@ const createUser = async (req, res) => {
       data: userData,
     });
   } catch (error) {
-    console.log(error);
-    return res.status(500).json(error.message);
+    next(error);
   }
 };
 
-const updateUser = async (req, res) => {
+const updateUser = async (req, res, next) => {
   try {
     const { id } = req.params;
     const { body } = req;
@@ -88,12 +85,11 @@ const updateUser = async (req, res) => {
       },
     });
   } catch (error) {
-    console.log(error);
-    return res.status(500).json(error.message);
+    next(error);
   }
 };
 
-const isActiveUser = async (req, res) => {
+const isActiveUser = async (req, res, next) => {
   try {
     const { id } = req.params;
 
@@ -113,12 +109,11 @@ const isActiveUser = async (req, res) => {
       },
     });
   } catch (error) {
-    console.log(error);
-    return res.status(500).json(error.message);
+    next(error);
   }
 };
 
-const deleteUser = async (req, res) => {
+const deleteUser = async (req, res, next) => {
     try {
         const { id } = req.params;
 
@@ -130,8 +125,7 @@ const deleteUser = async (req, res) => {
             message: 'User Deleted'
         })
     } catch (error) {
-        console.log(error);
-    return res.status(500).json(error.message);
+        next(error);
     }
 };
 

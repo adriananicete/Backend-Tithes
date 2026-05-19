@@ -3,7 +3,9 @@ import express from 'express';
 import cors from 'cors';
 import jwt from 'jsonwebtoken';
 import { Server as SocketIOServer } from 'socket.io';
+import helmet from 'helmet';
 import { connectDB } from './src/config/db.js';
+import { notFound, errorHandler } from './src/middlewares/errorHandler.js';
 import authRoutes from './src/routes/auth/authRoutes.js';
 import adminUserRoutes  from './src/routes/admin/userRoutes.js';
 import userRoutes from './src/routes/userRoutes.js';
@@ -19,7 +21,11 @@ import { setIO } from './src/services/realtime.js';
 const PORT = process.env.PORT || 7002;
 const app = express();
 
+// Render runs behind a proxy — needed for correct client IP (rate limiting)
+app.set('trust proxy', 1);
+
 // Middleware
+app.use(helmet());
 app.use(express.json());
 
 const allowedOrigins = (process.env.CORS_ORIGIN || '')
@@ -28,10 +34,8 @@ const allowedOrigins = (process.env.CORS_ORIGIN || '')
     .filter(Boolean);
 
 const corsOriginCheck = (origin, cb) => {
-    if (!origin) return cb(null, true);
-    if (allowedOrigins.length === 0) return cb(null, true);
+    if (!origin) return cb(null, true); // non-browser clients (curl, server-to-server)
     if (allowedOrigins.includes(origin)) return cb(null, true);
-    if (/^https:\/\/[a-z0-9-]+\.vercel\.app$/i.test(origin)) return cb(null, true);
     return cb(new Error(`Origin ${origin} not allowed by CORS`));
 };
 
@@ -54,6 +58,10 @@ app.use('/api/vouchers', voucherRoutes);
 app.use('/api/expenses', expenseRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/reports', reportRoutes);
+
+// 404 + centralized error handling — must be last
+app.use(notFound);
+app.use(errorHandler);
 
 const httpServer = createServer(app);
 
