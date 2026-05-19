@@ -246,6 +246,12 @@ const validateRequestForm = async (req, res) => {
         .status(403)
         .json({ error: "No permission to validate this request form" });
 
+    // The requester cannot validate their own request — conflict of interest.
+    if (findRequestFormById.requestedBy.toString() === req.user.id)
+      return res
+        .status(403)
+        .json({ error: "You cannot validate your own request form" });
+
     const updatedRequestForm = await RequestForm.findByIdAndUpdate(
       id,
       {
@@ -298,6 +304,12 @@ const approveRequestForm = async (req, res) => {
 
     if (!["admin", "auditor", "pastor"].includes(req.user.role))
       return res.status(403).json({ error: "You cannot approve this request" });
+
+    // The requester cannot approve their own request — conflict of interest.
+    if (findRequestFormById.requestedBy.toString() === req.user.id)
+      return res
+        .status(403)
+        .json({ error: "You cannot approve your own request form" });
 
     if (findRequestFormById.status !== "for_approval")
       return res
@@ -357,6 +369,12 @@ const rejectRequestForm = async (req, res) => {
 
     if (!["admin", "validator", "auditor", "pastor"].includes(req.user.role))
       return res.status(403).json({ error: "Forbidden" });
+
+    // The requester cannot reject their own request — conflict of interest.
+    if (findRequestFormById.requestedBy.toString() === req.user.id)
+      return res
+        .status(403)
+        .json({ error: "You cannot reject your own request form" });
 
     if (!["submitted", "for_approval"].includes(findRequestFormById.status))
       return res.status(400).json({ error: "Cannot reject this status" });
