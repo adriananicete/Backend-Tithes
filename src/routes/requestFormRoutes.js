@@ -1,5 +1,6 @@
 import express from "express";
 import { verifyToken } from "../middlewares/authMiddleware.js";
+import { authorizeRoles } from "../middlewares/roleMiddleware.js";
 import {
   approveRequestForm,
   createRequestForm,
@@ -20,10 +21,10 @@ router.post("/", verifyToken, createRequestForm);
 router.patch("/:id", verifyToken, updateRequestForm);
 router.delete("/:id", verifyToken, deleteRequestForm);
 router.patch("/:id/submit", verifyToken, submitRequestForm);
-router.patch("/:id/validate", verifyToken, validateRequestForm);
-router.patch("/:id/approve", verifyToken, approveRequestForm);
-router.patch("/:id/reject", verifyToken, rejectRequestForm);
-router.patch("/:id/disburse", verifyToken, disburseRequestForm);
+router.patch("/:id/validate", verifyToken, authorizeRoles("validator", "auditor", "admin"), validateRequestForm);
+router.patch("/:id/approve", verifyToken, authorizeRoles("admin", "auditor", "pastor"), approveRequestForm);
+router.patch("/:id/reject", verifyToken, authorizeRoles("admin", "validator", "auditor", "pastor"), rejectRequestForm);
+router.patch("/:id/disburse", verifyToken, authorizeRoles("admin", "do"), disburseRequestForm);
 router.patch("/:id/received", verifyToken, receivedRequestForm);
 
 export default router;
