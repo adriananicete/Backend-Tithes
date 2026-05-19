@@ -1,5 +1,6 @@
 import { Expense } from "../models/Expense.js";
 import { Tithes } from "../models/TithesEntry.js";
+import { parseDate } from "../utils/validate.js";
 import PDFDocument from "pdfkit";
 import excel from "exceljs";
 
@@ -9,10 +10,11 @@ const getTithesReport = async (req, res, next) => {
     const filter = {};
 
     if (startDate && endDate) {
-      filter.entryDate = {
-        $gte: new Date(startDate),
-        $lte: new Date(endDate),
-      };
+      const start = parseDate(startDate);
+      const end = parseDate(endDate);
+      if (!start || !end)
+        return res.status(400).json({ error: "Invalid startDate or endDate" });
+      filter.entryDate = { $gte: start, $lte: end };
     }
 
     if (req.user.role === "member") {
@@ -42,10 +44,11 @@ const getExpenseReport = async (req, res, next) => {
     const filter = {};
 
     if (startDate && endDate) {
-      filter.date = {
-        $gte: new Date(startDate),
-        $lte: new Date(endDate),
-      };
+      const start = parseDate(startDate);
+      const end = parseDate(endDate);
+      if (!start || !end)
+        return res.status(400).json({ error: "Invalid startDate or endDate" });
+      filter.date = { $gte: start, $lte: end };
     }
 
     const getAllExpense = await Expense.find(filter)
@@ -69,10 +72,11 @@ const exportTithesExcel = async (req, res, next) => {
     const filter = {};
 
     if (startDate && endDate) {
-      filter.entryDate = {
-        $gte: new Date(startDate),
-        $lte: new Date(endDate),
-      };
+      const start = parseDate(startDate);
+      const end = parseDate(endDate);
+      if (!start || !end)
+        return res.status(400).json({ error: "Invalid startDate or endDate" });
+      filter.entryDate = { $gte: start, $lte: end };
     }
 
     const generateTithesReport = await Tithes.find(filter)
@@ -194,10 +198,11 @@ const exportTithesPDF = async (req, res, next) => {
     const filter = {};
 
     if (startDate && endDate) {
-      filter.entryDate = {
-        $gte: new Date(startDate),
-        $lte: new Date(endDate),
-      };
+      const start = parseDate(startDate);
+      const end = parseDate(endDate);
+      if (!start || !end)
+        return res.status(400).json({ error: "Invalid startDate or endDate" });
+      filter.entryDate = { $gte: start, $lte: end };
     }
 
     const generateTithesReport = await Tithes.find(filter)
@@ -339,10 +344,11 @@ const exportExpenseExcel = async (req, res, next) => {
     const filter = {};
 
     if (startDate && endDate) {
-      filter.date = {
-        $gte: new Date(startDate),
-        $lte: new Date(endDate),
-      };
+      const start = parseDate(startDate);
+      const end = parseDate(endDate);
+      if (!start || !end)
+        return res.status(400).json({ error: "Invalid startDate or endDate" });
+      filter.date = { $gte: start, $lte: end };
     }
 
     const getExpenseAll = await Expense.find(filter)
@@ -434,10 +440,11 @@ const exportExpensePDF = async (req, res, next) => {
     const filter = {};
 
     if (startDate && endDate) {
-      filter.date = {
-        $gte: new Date(startDate),
-        $lte: new Date(endDate),
-      };
+      const start = parseDate(startDate);
+      const end = parseDate(endDate);
+      if (!start || !end)
+        return res.status(400).json({ error: "Invalid startDate or endDate" });
+      filter.date = { $gte: start, $lte: end };
     }
 
     const getExpenseAll = await Expense.find(filter)

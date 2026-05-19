@@ -1,6 +1,7 @@
 import { Tithes } from "../models/TithesEntry.js";
 import { Expense } from "../models/Expense.js";
 import { sendNotification, sendNotificationToRoles } from "../utils/sendNotification.js";
+import { parseDate } from "../utils/validate.js";
 
 const REVIEWER_ROLES = ["do", "auditor", "admin"];
 
@@ -10,11 +11,12 @@ const getAllTithes = async (req, res, next) => {
     const { startDate, endDate } = req.query;
     const filter = {};
 
-    if(startDate && endDate) {
-      filter.entryDate = {
-        $gte: new Date(startDate),
-        $lte: new Date(endDate)
-      }
+    if (startDate && endDate) {
+      const start = parseDate(startDate);
+      const end = parseDate(endDate);
+      if (!start || !end)
+        return res.status(400).json({ error: "Invalid startDate or endDate" });
+      filter.entryDate = { $gte: start, $lte: end };
     }
     const getAllData = await Tithes.find(filter)
       .sort({ createdAt: -1 })

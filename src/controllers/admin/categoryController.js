@@ -1,4 +1,5 @@
 import { Category } from "../../models/Category.js";
+import { isValidObjectId } from "../../utils/validate.js";
 
 const getAllCategories = async (req, res, next) => {
   try {
@@ -43,6 +44,8 @@ const createCategory = async (req, res, next) => {
 const updateCategory = async (req, res, next) => {
   try {
     const { id } = req.params;
+    if (!isValidObjectId(id))
+      return res.status(400).json({ error: "Invalid Category ID" });
     const { name, type, color } = req.body;
 
     const updatedCategory = await Category.findByIdAndUpdate(
@@ -72,6 +75,8 @@ const updateCategory = async (req, res, next) => {
 const deleteCategory = async (req, res, next) => {
   try {
     const { id } = req.params;
+    if (!isValidObjectId(id))
+      return res.status(400).json({ error: "Invalid Category ID" });
 
     const deletedCategory = await Category.findByIdAndDelete(id);
     if (!deletedCategory)
