@@ -30,4 +30,11 @@ const notifSchema = new mongoose.Schema({
     }
 },{timestamps: true});
 
+// getNotifications queries find({ userId }).sort({ createdAt: -1 }).
+notifSchema.index({ userId: 1, createdAt: -1 });
+// TTL: notifications fan out per recipient and are never deleted, so let
+// MongoDB auto-purge anything older than 90 days (read or not — a 90-day-
+// old notification is stale either way). TTL must be a single-field index.
+notifSchema.index({ createdAt: 1 }, { expireAfterSeconds: 60 * 60 * 24 * 90 });
+
 export const Notification = mongoose.model('Notification', notifSchema);

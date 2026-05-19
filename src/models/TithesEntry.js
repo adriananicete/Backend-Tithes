@@ -49,4 +49,10 @@ const tithesSchema = new mongoose.Schema(
   { timestamps: true },
 );
 
+// getAllTithes filters by status + entryDate range and sorts by createdAt;
+// its balance aggregation does $match { status: "approved" } (the status
+// prefix of the compound index covers that). Reports filter entryDate.
+tithesSchema.index({ status: 1, createdAt: -1 });
+tithesSchema.index({ entryDate: 1 });
+
 export const Tithes = mongoose.model("Tithes", tithesSchema);
