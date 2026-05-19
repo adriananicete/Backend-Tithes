@@ -3,7 +3,9 @@ import { User } from "../../models/User.js";
 
 const getAllUsers = async (req, res, next) => {
   try {
-    const allUsers = await User.find().select("-password");
+    const allUsers = await User.find()
+      .sort({ createdAt: -1 })
+      .select("-password");
 
     res.status(200).json(allUsers);
   } catch (error) {
