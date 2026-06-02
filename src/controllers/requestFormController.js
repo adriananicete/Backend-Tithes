@@ -66,6 +66,10 @@ const createRequestForm = async (req, res, next) => {
     if (!category) return res.status(400).json({ error: "Category required!" });
     if (!estimatedAmount)
       return res.status(400).json({ error: "Estimated Amount required!" });
+    // Remarks/particulars flow to the voucher and become the expense detail in
+    // financial reports, so they are required from creation.
+    if (!remarks || !String(remarks).trim())
+      return res.status(400).json({ error: "Remarks / particulars required!" });
 
     const amount = Number(estimatedAmount);
     if (isNaN(amount))
@@ -84,7 +88,7 @@ const createRequestForm = async (req, res, next) => {
       estimatedAmount: amount,
       requestedBy: req.user.id,
       attachments: attachments || [],
-      remarks: remarks || '',
+      remarks: String(remarks).trim(),
     });
 
     await newRequestForm.save();
@@ -117,6 +121,13 @@ const submitRequestForm = async (req, res, next) => {
       return res
         .status(400)
         .json({ error: "Only draft requests can be submitted" });
+
+    // Safety net: never let an RF without particulars enter the voucher
+    // pipeline (the expense detail in reports depends on this remark).
+    if (!requestForm.remarks || !requestForm.remarks.trim())
+      return res
+        .status(400)
+        .json({ error: "Add remarks / particulars before submitting" });
 
     requestForm.status = "submitted";
     requestForm.submittedAt = Date.now();
@@ -177,6 +188,15 @@ const updateRequestForm = async (req, res, next) => {
           .status(400)
           .json({ error: "Estimated Amount must be a positive number" });
       updates.estimatedAmount = amount;
+    }
+
+    // Don't let an edit blank out the required particulars.
+    if (updates.remarks !== undefined) {
+      if (!String(updates.remarks).trim())
+        return res
+          .status(400)
+          .json({ error: "Remarks / particulars cannot be empty" });
+      updates.remarks = String(updates.remarks).trim();
     }
 
     const updatedRequestForm = await RequestForm.findByIdAndUpdate(
