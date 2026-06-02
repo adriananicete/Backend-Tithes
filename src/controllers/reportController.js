@@ -14,7 +14,7 @@ import {
   buildMonthlyBreakdownSheet,
   getLogoBuffer,
   renderPdfDoc,
-  peso,
+  renderCombinedMonthlyPdf,
 } from "../utils/reportExport.js";
 
 const XLSX_TYPE =
@@ -361,39 +361,13 @@ const exportCombinedPDF = async (req, res, next) => {
     );
     doc.pipe(res);
 
-    renderPdfDoc(doc, {
-      reportName: "Financial Summary Report",
+    renderCombinedMonthlyPdf(doc, {
       startDate,
       endDate,
-      summaryBlock: {
-        title: "Financial Summary",
-        rows: [
-          { label: "Total Tithes", value: peso(summary.totalTithes) },
-          { label: "Total Expenses", value: peso(summary.totalExpenses) },
-          {
-            label: "NET Position",
-            value: peso(summary.net),
-            color: summary.net >= 0 ? "#15803d" : "#b91c1c",
-          },
-          { label: "Tithes Entries", value: String(summary.tithesCount) },
-          { label: "Expense Entries", value: String(summary.expenseCount) },
-        ],
-        byCategory: summary.byCategory,
-      },
-      sections: [
-        {
-          title: "Tithes",
-          columns: TITHES_COLUMNS,
-          rows: mapTithesRows(tithes),
-          totals: [{ key: "total", label: "Total Balance" }],
-        },
-        {
-          title: "Expense",
-          columns: EXPENSE_COLUMNS,
-          rows: mapExpenseRows(expenses),
-          totals: [{ key: "amount", label: "Total Expenses" }],
-        },
-      ],
+      tithes,
+      expenses,
+      summary,
+      logo: getLogoBuffer(),
     });
 
     doc.end();

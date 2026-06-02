@@ -659,7 +659,11 @@ export function renderPdfDoc(doc, { reportName, startDate, endDate, sections = [
     y = drawSection(doc, { section, left, y, pageBottom });
   });
 
-  // Footer with page numbers — two-pass over the buffered pages.
+  drawPageFooters(doc, left, contentW);
+}
+
+// Footer with "Generated" + page numbers — two-pass over the buffered pages.
+const drawPageFooters = (doc, left, contentW) => {
   const range = doc.bufferedPageRange();
   for (let i = 0; i < range.count; i++) {
     doc.switchToPage(range.start + i);
@@ -672,4 +676,229 @@ export function renderPdfDoc(doc, { reportName, startDate, endDate, sections = [
       lineBreak: false,
     });
   }
+};
+
+// Combined-report PDF that mirrors the Excel "Monthly Breakdown" sheet: logo
+// header -> period summary -> one section per month (weekly tithes w/ subtotals
+// + expenses w/ particulars + month NET) -> a detailed-records appendix.
+export function renderCombinedMonthlyPdf(
+  doc,
+  { startDate, endDate, tithes, expenses, summary, logo },
+) {
+  const left = doc.page.margins.left;
+  const contentW = doc.page.width - left - doc.page.margins.right;
+  const pageBottom = doc.page.height - doc.page.margins.bottom - FOOTER_H;
+  let y = doc.page.margins.top;
+
+  if (logo) {
+    try {
+      doc.image(logo, left, y, { width: 46, height: 46 });
+    } catch {
+      /* missing/invalid logo shouldn't break the export */
+    }
+  }
+  y = drawDocHeader(doc, {
+    reportName: "Financial Report",
+    startDate,
+    endDate,
+    left,
+    contentW,
+    y,
+  });
+
+  y = drawSummaryBlock(doc, {
+    summaryBlock: {
+      title: "Period Summary",
+      rows: [
+        { label: "Total Tithes", value: peso(summary.totalTithes) },
+        { label: "Total Expenses", value: peso(summary.totalExpenses) },
+        {
+          label: "NET Position",
+          value: peso(summary.net),
+          color: summary.net >= 0 ? "#15803d" : "#b91c1c",
+        },
+      ],
+      byCategory: summary.byCategory,
+    },
+    left,
+    y,
+    pageBottom,
+  });
+
+  // Generic month table: rows carry a style ('data' | 'subtotal' | 'total' |
+  // 'empty') so subtotal/total rows render bold on a tinted band.
+  const drawMonthTable = ({ heading, columns, body }) => {
+    const widths = columns.map((c) => c.width);
+    const totalW = widths.reduce((a, b) => a + b, 0);
+    const xs = [];
+    let cx = left;
+    widths.forEach((w) => {
+      xs.push(cx);
+      cx += w;
+    });
+    const headerBand = () => {
+      doc.rect(left, y, totalW, ROW_H).fill(PDF_HEADER_FILL);
+      doc.fillColor("white").font("Helvetica-Bold").fontSize(9);
+      columns.forEach((c, i) =>
+        cellText(doc, c.header, xs[i], widths[i], y + 6, c.money ? "right" : c.align || "center"),
+      );
+      y += ROW_H;
+    };
+
+    if (y + ROW_H * 2 > pageBottom) {
+      doc.addPage();
+      y = doc.page.margins.top;
+    }
+    if (heading) {
+      doc.font("Helvetica-Bold").fontSize(10).fillColor("#374151").text(heading, left, y, {
+        lineBreak: false,
+      });
+      y += 15;
+    }
+    headerBand();
+
+    body.forEach((r) => {
+      if (y + ROW_H > pageBottom) {
+        doc.addPage();
+        y = doc.page.margins.top;
+        headerBand();
+      }
+      if (r.style === "data" && r.band) doc.rect(left, y, totalW, ROW_H).fill(PDF_BAND_FILL);
+      if (r.style === "subtotal" || r.style === "total")
+        doc.rect(left, y, totalW, ROW_H).fill("#e8eefb");
+      const bold = r.style === "subtotal" || r.style === "total";
+      doc.fillColor("#111111").font(bold ? "Helvetica-Bold" : "Helvetica").fontSize(8);
+      columns.forEach((c, i) => {
+        const raw = r.cells[i];
+        const val = c.money && raw !== "" && raw != null ? peso(raw) : raw ?? "";
+        cellText(doc, val, xs[i], widths[i], y + 6, c.money ? "right" : c.align || "center");
+      });
+      y += ROW_H;
+    });
+  };
+
+  const months = monthsInScope(startDate, endDate, tithes, expenses);
+  months.forEach((mi) => {
+    if (y + 60 > pageBottom) {
+      doc.addPage();
+      y = doc.page.margins.top;
+    }
+    y += 8;
+    doc.font("Helvetica-Bold").fontSize(12).fillColor("#1e3a8a").text(monthLabel(mi), left, y, {
+      lineBreak: false,
+    });
+    y += 18;
+
+    // --- Weekly tithes ---
+    const mt = tithes
+      .filter((t) => monthIndex(t.entryDate) === mi)
+      .sort((a, b) => new Date(a.entryDate) - new Date(b.entryDate));
+    const titheTotal = mt.reduce((s, t) => s + (t.total || 0), 0);
+    const titheCols = [
+      { header: "Week", width: 70 },
+      { header: "Date", width: 90 },
+      { header: "Service Type", width: contentW - 70 - 90 - 95, align: "left" },
+      { header: "Amount", width: 95, money: true },
+    ];
+    const tBody = [];
+    if (mt.length === 0) {
+      tBody.push({ style: "empty", cells: ["—", "", "No tithes recorded", ""] });
+    } else {
+      const weeks = {};
+      mt.forEach((t) => (weeks[weekOfMonth(t.entryDate)] ??= []).push(t));
+      let band = false;
+      Object.keys(weeks)
+        .map(Number)
+        .sort((a, b) => a - b)
+        .forEach((wk) => {
+          weeks[wk].forEach((t) => {
+            tBody.push({
+              style: "data",
+              band,
+              cells: [`Week ${wk}`, fmtDate(t.entryDate), t.serviceType || "", t.total || 0],
+            });
+            band = !band;
+          });
+          tBody.push({
+            style: "subtotal",
+            cells: ["", "", `Week ${wk} Subtotal`, weeks[wk].reduce((s, t) => s + (t.total || 0), 0)],
+          });
+        });
+    }
+    tBody.push({ style: "total", cells: ["", "", "Total Tithes", titheTotal] });
+    drawMonthTable({ heading: "Weekly Tithes", columns: titheCols, body: tBody });
+
+    y += 6;
+
+    // --- Expenses ---
+    const me = expenses
+      .filter((e) => monthIndex(e.date) === mi)
+      .sort((a, b) => new Date(a.date) - new Date(b.date));
+    const expTotal = me.reduce((s, e) => s + (e.amount || 0), 0);
+    const expCols = [
+      { header: "Date", width: 80 },
+      { header: "Details / Particulars", width: contentW - 80 - 110 - 95, align: "left" },
+      { header: "Category", width: 110, align: "left" },
+      { header: "Amount", width: 95, money: true },
+    ];
+    const eBody = [];
+    if (me.length === 0) {
+      eBody.push({ style: "empty", cells: ["—", "No expenses recorded", "", ""] });
+    } else {
+      me.forEach((e, i) =>
+        eBody.push({
+          style: "data",
+          band: i % 2 === 1,
+          cells: [fmtDate(e.date), expenseDetail(e), e.category?.name || "", e.amount || 0],
+        }),
+      );
+    }
+    eBody.push({ style: "total", cells: ["", "", "Total Expenses", expTotal] });
+    drawMonthTable({ heading: "Expenses", columns: expCols, body: eBody });
+
+    // --- Month NET ---
+    const net = titheTotal - expTotal;
+    if (y + ROW_H > pageBottom) {
+      doc.addPage();
+      y = doc.page.margins.top;
+    }
+    doc.rect(left, y, contentW, ROW_H).fill("#dceafe");
+    doc.fillColor(net >= 0 ? "#15803d" : "#b91c1c").font("Helvetica-Bold").fontSize(9);
+    cellText(doc, "Month NET", left, contentW - 95, y + 6, "right");
+    cellText(doc, peso(net), left + contentW - 95, 95, y + 6, "right");
+    y += ROW_H + 6;
+  });
+
+  // --- Detailed-records appendix (full flat tables) ---
+  doc.addPage();
+  y = doc.page.margins.top;
+  doc.font("Helvetica-Bold").fontSize(13).fillColor("#111111").text("Detailed Records", left, y, {
+    lineBreak: false,
+  });
+  y += 22;
+  y = drawSection(doc, {
+    section: {
+      title: "All Tithes",
+      columns: TITHES_COLUMNS,
+      rows: mapTithesRows(tithes),
+      totals: [{ key: "total", label: "Total Balance" }],
+    },
+    left,
+    y,
+    pageBottom,
+  });
+  y += 14;
+  drawSection(doc, {
+    section: {
+      title: "All Expenses",
+      columns: EXPENSE_COLUMNS,
+      rows: mapExpenseRows(expenses),
+      totals: [{ key: "amount", label: "Total Expenses" }],
+    },
+    left,
+    y,
+    pageBottom,
+  });
+
+  drawPageFooters(doc, left, contentW);
 }
