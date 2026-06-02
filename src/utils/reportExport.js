@@ -9,10 +9,15 @@ import { fileURLToPath } from "url";
 // then stream it. Used by the tithes/expense exports and the combined report.
 // ---------------------------------------------------------------------------
 
-export const CHURCH = "JOSCM";
+export const CHURCH = "Jesus Our Saviour Christian Ministry";
 const CURRENCY_FMT = "#,##0.00";
-const HEADER_FILL = "FF4F8EF7";
-const BAND_FILL = "FFF0F4FF";
+// Church palette: teal #326b7e (primary), white #ffffff, gold #ccac55 (accent).
+const TEAL = "FF326B7E";
+const GOLD = "FFCCAC55";
+const HEADER_FILL = TEAL;
+const BAND_FILL = "FFEAF1F3"; // very light teal tint for zebra striping
+const TEAL_TINT = "FFDCE7EA"; // subtotal / total bands
+const GOLD_TINT = "FFF6EFD6"; // Month NET accent
 const BORDER = { style: "thin", color: { argb: "FFDDDDDD" } };
 const STATUS_COLORS = {
   approved: "FF15803D",
@@ -340,6 +345,22 @@ export function buildMonthlyBreakdownSheet(
   const borderRow = (row) => {
     for (let c = 1; c <= 4; c++) row.getCell(c).border = allBorder;
   };
+  // Draw a thick outline around a A..D row range so each month reads as its
+  // own boxed section. Merges with the existing thin inner grid.
+  const outline = (top, bottom, argb = TEAL, style = "medium") => {
+    for (let r = top; r <= bottom; r++) {
+      const row = ws.getRow(r);
+      for (let c = 1; c <= 4; c++) {
+        const cell = row.getCell(c);
+        const b = { ...(cell.border || {}) };
+        if (r === top) b.top = { style, color: { argb } };
+        if (r === bottom) b.bottom = { style, color: { argb } };
+        if (c === 1) b.left = { style, color: { argb } };
+        if (c === 4) b.right = { style, color: { argb } };
+        cell.border = b;
+      }
+    }
+  };
 
   const titleRow = (text, font) => {
     const row = ws.addRow([text]);
@@ -392,7 +413,7 @@ export function buildMonthlyBreakdownSheet(
       row.getCell(c).fill = {
         type: "pattern",
         pattern: "solid",
-        fgColor: { argb: opts.fill || "FFE8EEFB" },
+        fgColor: { argb: opts.fill || TEAL_TINT },
       };
     }
     return row;
@@ -406,8 +427,8 @@ export function buildMonthlyBreakdownSheet(
       editAs: "oneCell",
     });
   }
-  titleRow(CHURCH, { bold: true, size: 16 }).height = 24;
-  titleRow("Financial Report", { bold: true, size: 13 });
+  titleRow(CHURCH, { bold: true, size: 15, color: { argb: TEAL } }).height = 26;
+  titleRow("Financial Report", { bold: true, size: 13, color: { argb: GOLD } });
   titleRow(rangeLine(startDate, endDate), {
     italic: true,
     size: 10,
@@ -446,10 +467,10 @@ export function buildMonthlyBreakdownSheet(
     const expTotal = me.reduce((s, e) => s + (e.amount || 0), 0);
 
     ws.addRow([]);
-    mergedBand(monthLabel(mi), "FF1E3A8A", null);
+    const sectionStart = mergedBand(monthLabel(mi), "FFFFFFFF", TEAL, 12).number;
 
     // Weekly tithes
-    mergedBand("Weekly Tithes", "FF374151", null, 10);
+    mergedBand("Weekly Tithes", TEAL, null, 10);
     tableHeader(["Week", "Date", "Service Type", "Amount"]);
     if (mt.length === 0) {
       dataStyle(ws.addRow(["—", "", "No tithes recorded", null]), 0);
@@ -483,7 +504,7 @@ export function buildMonthlyBreakdownSheet(
 
     // Expenses
     ws.addRow([]);
-    mergedBand("Expenses", "FF374151", null, 10);
+    mergedBand("Expenses", TEAL, null, 10);
     tableHeader(["Date", "Details / Particulars", "Category", "Amount"]);
     if (me.length === 0) {
       dataStyle(ws.addRow(["—", "No expenses recorded", "", null]), 0);
@@ -504,10 +525,13 @@ export function buildMonthlyBreakdownSheet(
 
     // Month NET
     const net = titheTotal - expTotal;
-    totalRow("Month NET", net, {
-      fill: "FFDCEAFE",
+    const sectionEnd = totalRow("Month NET", net, {
+      fill: GOLD_TINT,
       argb: net >= 0 ? "FF15803D" : "FFB91C1C",
-    });
+    }).number;
+
+    // Box the whole month so it reads as one section at a glance.
+    outline(sectionStart, sectionEnd, TEAL, "medium");
   });
 }
 
