@@ -1,6 +1,7 @@
 import mongoose from "mongoose";
 import { RequestForm } from "../models/RequestForm.js";
 import { Voucher } from "../models/Voucher.js";
+import { Expense } from "../models/Expense.js";
 import { autoRecordExpense } from "../utils/autoRecordExpense.js";
 import { sendNotification, sendNotificationToRoles } from "../utils/sendNotification.js";
 
@@ -132,4 +133,89 @@ const createVoucher = async (req, res, next) => {
   }
 };
 
-export { getAllVouchers, createVoucher };
+const cancelVoucher = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    if (!mongoose.Types.ObjectId.isValid(id))
+      return res.status(400).json({ error: "Invalid ID" });
+
+    if (!["validator", "admin"].includes(req.user.role))
+      return res.status(403).json({ error: "Unauthorized" });
+
+    const voucher = await Voucher.findById(id);
+    if (!voucher)
+      return res.status(404).json({ error: "Voucher not found" });
+
+    // Validators may only cancel vouchers they created; admin can cancel any.
+    if (
+      req.user.role === "validator" &&
+      voucher.createdBy?.toString() !== req.user.id
+    )
+      return res
+        .status(403)
+        .json({ error: "You can only cancel vouchers you created" });
+
+    if (voucher.status === "cancelled")
+      return res.status(400).json({ error: "Voucher is already cancelled" });
+
+    const requestForm = await RequestForm.findById(voucher.rfId);
+    if (!requestForm)
+      return res.status(404).json({ error: "Linked request form not found" });
+
+    // Only cancellable before disbursement — once disbursed/received the
+    // money is out, so the voucher is locked.
+    if (requestForm.status !== "voucher_created")
+      return res
+        .status(400)
+        .json({ error: "Only vouchers that are not yet disbursed can be cancelled" });
+
+    const { cancellationNote } = req.body;
+
+    // Reverse the auto-recorded expense so reports don't count a cancelled
+    // voucher. Matches the record created by autoRecordExpense on creation.
+    await Expense.deleteOne({ source: "voucher", linkedId: voucher._id });
+
+    voucher.status = "cancelled";
+    voucher.cancelledBy = req.user.id;
+    voucher.cancelledAt = Date.now();
+    if (cancellationNote) voucher.cancellationNote = cancellationNote;
+    await voucher.save();
+
+    // Reopen the RF back to approved so a new voucher can be created for it.
+    const reopenedRf = await RequestForm.findByIdAndUpdate(
+      voucher.rfId,
+      {
+        $set: { status: "approved" },
+        $unset: { voucherId: "", voucherCreatedAt: "" },
+      },
+      { new: true, runValidators: true }
+    );
+
+    await sendNotification({
+      userId: reopenedRf.requestedBy,
+      message: `Voucher ${voucher.pcfNo} for your request ${reopenedRf.rfNo} was cancelled. The request is open again.`,
+      type: "info",
+      refId: reopenedRf._id,
+      refModel: "RequestForm",
+    });
+
+    await sendNotificationToRoles({
+      roles: ["do", "auditor", "admin"],
+      message: `Voucher ${voucher.pcfNo} was cancelled and ${reopenedRf.rfNo} reopened`,
+      type: "info",
+      refId: reopenedRf._id,
+      refModel: "RequestForm",
+      excludeUserId: req.user.id,
+    });
+
+    res.status(200).json({
+      status: "Success",
+      message: `Voucher ${voucher.pcfNo} cancelled and ${reopenedRf.rfNo} reopened`,
+      data: voucher,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export { getAllVouchers, createVoucher, cancelVoucher };
