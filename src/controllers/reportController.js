@@ -37,7 +37,8 @@ const parseDateRange = (req, res) => {
 };
 
 const fetchTithes = (start, end) => {
-  const filter = {};
+  // Reports reflect actual collections, so only approved tithes count.
+  const filter = { status: "approved" };
   if (start && end) filter.entryDate = { $gte: start, $lte: end };
   return Tithes.find(filter)
     .populate("submittedBy", "name role")
@@ -64,7 +65,8 @@ const newPdf = () =>
 const getTithesReport = async (req, res, next) => {
   try {
     const { startDate, endDate } = req.query;
-    const filter = {};
+    // Reports reflect actual collections, so only approved tithes count.
+    const filter = { status: "approved" };
 
     if (startDate && endDate) {
       const start = parseDate(startDate);
@@ -129,7 +131,8 @@ const exportTithesExcel = async (req, res, next) => {
     if (!range) return;
     const { startDate, endDate } = req.query;
 
-    const filter = {};
+    // Reports reflect actual collections, so only approved tithes count.
+    const filter = { status: "approved" };
     if (range.start && range.end)
       filter.entryDate = { $gte: range.start, $lte: range.end };
     if (req.user.role === "member") filter.submittedBy = req.user.id;
@@ -163,7 +166,8 @@ const exportTithesPDF = async (req, res, next) => {
     if (!range) return;
     const { startDate, endDate } = req.query;
 
-    const filter = {};
+    // Reports reflect actual collections, so only approved tithes count.
+    const filter = { status: "approved" };
     if (range.start && range.end)
       filter.entryDate = { $gte: range.start, $lte: range.end };
     if (req.user.role === "member") filter.submittedBy = req.user.id;
