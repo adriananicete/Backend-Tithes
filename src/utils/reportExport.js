@@ -1,4 +1,7 @@
 import excel from "exceljs";
+import fs from "fs";
+import path from "path";
+import { fileURLToPath } from "url";
 
 // ---------------------------------------------------------------------------
 // Shared report-export builders. No DB access and no `res` handling here —
@@ -41,6 +44,54 @@ const colLetter = (n) => {
   }
   return s;
 };
+
+// ---- JOSCM logo (bundled asset, embedded into the workbook header) ----
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const LOGO_PATH = path.join(__dirname, "../assets/joscm-logo.png");
+let _logoBuffer; // undefined = not loaded; null = unavailable
+export const getLogoBuffer = () => {
+  if (_logoBuffer === undefined) {
+    try {
+      _logoBuffer = fs.readFileSync(LOGO_PATH);
+    } catch {
+      _logoBuffer = null; // missing asset shouldn't break the export
+    }
+  }
+  return _logoBuffer;
+};
+
+// ---- Month / week helpers (used by the monthly-breakdown sheet) ----
+const MONTH_NAMES = [
+  "January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December",
+];
+// Week-of-month: 1..5, where Week 1 = days 1-7, Week 2 = 8-14, etc.
+const weekOfMonth = (d) => Math.floor((new Date(d).getDate() - 1) / 7) + 1;
+const monthIndex = (d) => {
+  const dt = new Date(d);
+  return dt.getFullYear() * 12 + dt.getMonth();
+};
+const monthLabel = (idx) => `${MONTH_NAMES[idx % 12]} ${Math.floor(idx / 12)}`;
+
+// Months to render, in order. With a date range we list every month it spans
+// (so empty months still show as zero); otherwise we use the months present
+// in the data.
+const monthsInScope = (startDate, endDate, tithes, expenses) => {
+  if (startDate && endDate) {
+    const out = [];
+    for (let i = monthIndex(startDate); i <= monthIndex(endDate); i++) out.push(i);
+    return out;
+  }
+  const set = new Set();
+  tithes.forEach((t) => set.add(monthIndex(t.entryDate)));
+  expenses.forEach((e) => set.add(monthIndex(e.date)));
+  return [...set].sort((a, b) => a - b);
+};
+
+// "Where the money went" detail: the recorded expense remark, falling back to
+// the linked request-form remark for voucher-sourced expenses.
+const expenseDetail = (e) =>
+  e.remarks || e.linkedId?.rfId?.remarks || "—";
 
 // ---- Column definitions (shared by Excel + PDF + JSON mappers) ----
 export const TITHES_COLUMNS = [
@@ -263,6 +314,201 @@ export function buildCombinedSummarySheet(ws, { startDate, endDate, summary }) {
       row.getCell(2).alignment = { horizontal: "right" };
     });
   }
+}
+
+// Combined-report "Monthly Breakdown" sheet. Reads top-to-bottom like a
+// treasurer's report: logo header -> period summary -> one section per month,
+// each with a weekly tithes table (Week 1..5 + subtotals), an expense table
+// (date / particulars / category), monthly totals, and the month NET.
+export function buildMonthlyBreakdownSheet(
+  ws,
+  { startDate, endDate, tithes, expenses, summary, logoImageId },
+) {
+  ws.columns = [
+    { key: "a", width: 20 },
+    { key: "b", width: 34 },
+    { key: "c", width: 22 },
+    { key: "d", width: 16 },
+  ];
+
+  const allBorder = { top: BORDER, left: BORDER, bottom: BORDER, right: BORDER };
+  const money = (cell, v) => {
+    cell.value = v;
+    cell.numFmt = CURRENCY_FMT;
+    cell.alignment = { horizontal: "right" };
+  };
+  const borderRow = (row) => {
+    for (let c = 1; c <= 4; c++) row.getCell(c).border = allBorder;
+  };
+
+  const titleRow = (text, font) => {
+    const row = ws.addRow([text]);
+    ws.mergeCells(`A${row.number}:D${row.number}`);
+    const c = row.getCell(1);
+    c.font = font;
+    c.alignment = { horizontal: "center", vertical: "middle" };
+    return row;
+  };
+  const mergedBand = (label, fontColor, fillArgb, size = 12) => {
+    const row = ws.addRow([label]);
+    ws.mergeCells(`A${row.number}:D${row.number}`);
+    const c = row.getCell(1);
+    c.font = { bold: true, size, color: { argb: fontColor } };
+    c.alignment = { horizontal: "left", vertical: "middle" };
+    if (fillArgb)
+      c.fill = { type: "pattern", pattern: "solid", fgColor: { argb: fillArgb } };
+    row.height = 20;
+    return row;
+  };
+  const tableHeader = (labels) => {
+    const row = ws.addRow(labels);
+    row.eachCell((cell) => {
+      cell.font = { bold: true, color: { argb: "FFFFFFFF" } };
+      cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: HEADER_FILL } };
+      cell.alignment = { horizontal: "center", vertical: "middle" };
+      cell.border = allBorder;
+    });
+  };
+  const dataStyle = (row, i) => {
+    for (let c = 1; c <= 4; c++) {
+      const cell = row.getCell(c);
+      cell.border = allBorder;
+      if (c !== 4) cell.alignment = { horizontal: "center" };
+      if (i % 2 === 1)
+        cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: BAND_FILL } };
+    }
+  };
+  const totalRow = (label, value, opts = {}) => {
+    const row = ws.addRow(["", "", label, null]);
+    row.getCell(3).font = { bold: true };
+    row.getCell(3).alignment = { horizontal: "right" };
+    money(row.getCell(4), value);
+    row.getCell(4).font = {
+      bold: true,
+      ...(opts.argb ? { color: { argb: opts.argb } } : {}),
+    };
+    for (let c = 1; c <= 4; c++) {
+      row.getCell(c).border = allBorder;
+      row.getCell(c).fill = {
+        type: "pattern",
+        pattern: "solid",
+        fgColor: { argb: opts.fill || "FFE8EEFB" },
+      };
+    }
+    return row;
+  };
+
+  // --- Header block (logo floats at the left over the title rows) ---
+  if (logoImageId != null) {
+    ws.addImage(logoImageId, {
+      tl: { col: 0, row: 0 },
+      ext: { width: 56, height: 56 },
+      editAs: "oneCell",
+    });
+  }
+  titleRow(CHURCH, { bold: true, size: 16 }).height = 24;
+  titleRow("Financial Report", { bold: true, size: 13 });
+  titleRow(rangeLine(startDate, endDate), {
+    italic: true,
+    size: 10,
+    color: { argb: "FF666666" },
+  });
+  titleRow(`Generated: ${fmtDate(new Date())}`, {
+    size: 9,
+    color: { argb: "FF888888" },
+  });
+  ws.addRow([]);
+
+  // --- Period summary ---
+  mergedBand("Period Summary", "FFFFFFFF", HEADER_FILL);
+  totalRow("Total Tithes", summary.totalTithes, { fill: "FFFFFFFF" });
+  totalRow("Total Expenses", summary.totalExpenses, { fill: "FFFFFFFF" });
+  totalRow("NET Position", summary.net, {
+    fill: "FFFFFFFF",
+    argb: summary.net >= 0 ? "FF15803D" : "FFB91C1C",
+  });
+
+  // --- Per-month sections ---
+  const months = monthsInScope(startDate, endDate, tithes, expenses);
+  const tByMonth = {};
+  tithes.forEach((t) => (tByMonth[monthIndex(t.entryDate)] ??= []).push(t));
+  const eByMonth = {};
+  expenses.forEach((e) => (eByMonth[monthIndex(e.date)] ??= []).push(e));
+
+  months.forEach((mi) => {
+    const mt = (tByMonth[mi] || [])
+      .slice()
+      .sort((a, b) => new Date(a.entryDate) - new Date(b.entryDate));
+    const me = (eByMonth[mi] || [])
+      .slice()
+      .sort((a, b) => new Date(a.date) - new Date(b.date));
+    const titheTotal = mt.reduce((s, t) => s + (t.total || 0), 0);
+    const expTotal = me.reduce((s, e) => s + (e.amount || 0), 0);
+
+    ws.addRow([]);
+    mergedBand(monthLabel(mi), "FF1E3A8A", null);
+
+    // Weekly tithes
+    mergedBand("Weekly Tithes", "FF374151", null, 10);
+    tableHeader(["Week", "Date", "Service Type", "Amount"]);
+    if (mt.length === 0) {
+      dataStyle(ws.addRow(["—", "", "No tithes recorded", null]), 0);
+    } else {
+      const weeks = {};
+      mt.forEach((t) => (weeks[weekOfMonth(t.entryDate)] ??= []).push(t));
+      let band = 0;
+      Object.keys(weeks)
+        .map(Number)
+        .sort((a, b) => a - b)
+        .forEach((wk) => {
+          weeks[wk].forEach((t) => {
+            const row = ws.addRow([
+              `Week ${wk}`,
+              fmtDate(t.entryDate),
+              t.serviceType || "",
+              null,
+            ]);
+            dataStyle(row, band++);
+            money(row.getCell(4), t.total || 0);
+          });
+          const sub = ws.addRow(["", "", `Week ${wk} Subtotal`, null]);
+          sub.getCell(3).font = { italic: true, bold: true };
+          sub.getCell(3).alignment = { horizontal: "right" };
+          money(sub.getCell(4), weeks[wk].reduce((s, t) => s + (t.total || 0), 0));
+          sub.getCell(4).font = { italic: true, bold: true };
+          borderRow(sub);
+        });
+    }
+    totalRow("Total Tithes", titheTotal);
+
+    // Expenses
+    ws.addRow([]);
+    mergedBand("Expenses", "FF374151", null, 10);
+    tableHeader(["Date", "Details / Particulars", "Category", "Amount"]);
+    if (me.length === 0) {
+      dataStyle(ws.addRow(["—", "No expenses recorded", "", null]), 0);
+    } else {
+      me.forEach((e, i) => {
+        const row = ws.addRow([
+          fmtDate(e.date),
+          expenseDetail(e),
+          e.category?.name || "",
+          null,
+        ]);
+        dataStyle(row, i);
+        row.getCell(2).alignment = { horizontal: "left", wrapText: true };
+        money(row.getCell(4), e.amount || 0);
+      });
+    }
+    totalRow("Total Expenses", expTotal);
+
+    // Month NET
+    const net = titheTotal - expTotal;
+    totalRow("Month NET", net, {
+      fill: "FFDCEAFE",
+      argb: net >= 0 ? "FF15803D" : "FFB91C1C",
+    });
+  });
 }
 
 // ---------------------------------------------------------------------------

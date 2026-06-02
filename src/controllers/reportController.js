@@ -11,6 +11,8 @@ import {
   computeCombinedSummary,
   buildExcelSheet,
   buildCombinedSummarySheet,
+  buildMonthlyBreakdownSheet,
+  getLogoBuffer,
   renderPdfDoc,
   peso,
 } from "../utils/reportExport.js";
@@ -48,7 +50,12 @@ const fetchExpenses = (start, end) => {
   return Expense.find(filter)
     .populate("category", "name type")
     .populate("recordedBy", "name role")
-    .populate("linkedId", "pcfNo amount");
+    .populate({
+      path: "linkedId",
+      select: "pcfNo amount rfId",
+      // RF remark is the "what it was spent on" detail for voucher expenses.
+      populate: { path: "rfId", select: "remarks rfNo" },
+    });
 };
 
 const newPdf = () =>
@@ -282,6 +289,23 @@ const exportCombinedExcel = async (req, res, next) => {
     const summary = computeCombinedSummary(tithes, expenses);
 
     const wb = new excel.Workbook();
+
+    // Embed the JOSCM logo once at workbook level; the id is reusable per sheet.
+    const logoBuffer = getLogoBuffer();
+    const logoImageId =
+      logoBuffer != null
+        ? wb.addImage({ buffer: logoBuffer, extension: "png" })
+        : null;
+
+    // Primary sheet: month-by-month breakdown for transparency.
+    buildMonthlyBreakdownSheet(wb.addWorksheet("Monthly Breakdown"), {
+      startDate,
+      endDate,
+      tithes,
+      expenses,
+      summary,
+      logoImageId,
+    });
     buildCombinedSummarySheet(wb.addWorksheet("Summary"), {
       startDate,
       endDate,
