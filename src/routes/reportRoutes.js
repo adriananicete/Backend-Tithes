@@ -7,6 +7,9 @@ import {
   exportTithesPDF,
   getExpenseReport,
   getTithesReport,
+  getCombinedReport,
+  exportCombinedExcel,
+  exportCombinedPDF,
 } from "../controllers/reportController.js";
 import { authorizeRoles } from "../middlewares/roleMiddleware.js";
 
@@ -27,6 +30,24 @@ router.get(
   verifyToken,
   authorizeRoles("admin", "auditor"),
   exportExpensePDF,
+);
+router.get(
+  "/combined",
+  verifyToken,
+  authorizeRoles("admin", "auditor"),
+  getCombinedReport,
+);
+router.get(
+  "/combined/export/excel",
+  verifyToken,
+  authorizeRoles("admin", "auditor"),
+  exportCombinedExcel,
+);
+router.get(
+  "/combined/export/pdf",
+  verifyToken,
+  authorizeRoles("admin", "auditor"),
+  exportCombinedPDF,
 );
 
 export default router;
