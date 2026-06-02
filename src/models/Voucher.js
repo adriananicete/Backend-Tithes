@@ -27,7 +27,21 @@ const voucherSchema = new mongoose.Schema({
         type: mongoose.Schema.Types.ObjectId,
         ref: 'User',
     },
-    status: {type: String, default: 'approved'}
+    status: {
+        type: String,
+        enum: ['approved', 'cancelled'],
+        default: 'approved'
+    },
+    cancelledBy: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User',
+    },
+    cancelledAt: {
+        type: Date,
+    },
+    cancellationNote: {
+        type: String,
+    }
 }, {timestamps: true})
 
 export const Voucher = mongoose.model('Voucher', voucherSchema);

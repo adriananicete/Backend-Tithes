@@ -1,7 +1,7 @@
 import express from 'express';
 import { verifyToken } from '../middlewares/authMiddleware.js';
 import { uploadReceipts, handleUploadError } from '../middlewares/uploadMiddleware.js';
-import { createVoucher, getAllVouchers } from '../controllers/voucherController.js';
+import { createVoucher, getAllVouchers, cancelVoucher } from '../controllers/voucherController.js';
 
 const router = express.Router();
 
@@ -13,6 +13,7 @@ router.post(
     handleUploadError,
     createVoucher
 );
+router.patch('/:id/cancel', verifyToken, cancelVoucher);
 
 export default router;
 
