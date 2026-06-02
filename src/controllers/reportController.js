@@ -3,6 +3,56 @@ import { Tithes } from "../models/TithesEntry.js";
 import { parseDate } from "../utils/validate.js";
 import PDFDocument from "pdfkit";
 import excel from "exceljs";
+import {
+  TITHES_COLUMNS,
+  EXPENSE_COLUMNS,
+  mapTithesRows,
+  mapExpenseRows,
+  computeCombinedSummary,
+  buildExcelSheet,
+  buildCombinedSummarySheet,
+  renderPdfDoc,
+  peso,
+} from "../utils/reportExport.js";
+
+const XLSX_TYPE =
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+
+// Parse the optional ?startDate&endDate range. Returns { start, end } (nulls
+// when absent), or null after sending a 400 for an invalid range.
+const parseDateRange = (req, res) => {
+  const { startDate, endDate } = req.query;
+  if (startDate && endDate) {
+    const start = parseDate(startDate);
+    const end = parseDate(endDate);
+    if (!start || !end) {
+      res.status(400).json({ error: "Invalid startDate or endDate" });
+      return null;
+    }
+    return { start, end };
+  }
+  return { start: null, end: null };
+};
+
+const fetchTithes = (start, end) => {
+  const filter = {};
+  if (start && end) filter.entryDate = { $gte: start, $lte: end };
+  return Tithes.find(filter)
+    .populate("submittedBy", "name role")
+    .populate("reviewedBy", "name role");
+};
+
+const fetchExpenses = (start, end) => {
+  const filter = {};
+  if (start && end) filter.date = { $gte: start, $lte: end };
+  return Expense.find(filter)
+    .populate("category", "name type")
+    .populate("recordedBy", "name role")
+    .populate("linkedId", "pcfNo amount");
+};
+
+const newPdf = () =>
+  new PDFDocument({ size: "letter", margin: 36, bufferPages: true });
 
 const getTithesReport = async (req, res, next) => {
   try {
@@ -68,269 +118,69 @@ const getExpenseReport = async (req, res, next) => {
 
 const exportTithesExcel = async (req, res, next) => {
   try {
+    const range = parseDateRange(req, res);
+    if (!range) return;
     const { startDate, endDate } = req.query;
+
     const filter = {};
-
-    if (startDate && endDate) {
-      const start = parseDate(startDate);
-      const end = parseDate(endDate);
-      if (!start || !end)
-        return res.status(400).json({ error: "Invalid startDate or endDate" });
-      filter.entryDate = { $gte: start, $lte: end };
-    }
-
-    const generateTithesReport = await Tithes.find(filter)
+    if (range.start && range.end)
+      filter.entryDate = { $gte: range.start, $lte: range.end };
+    if (req.user.role === "member") filter.submittedBy = req.user.id;
+    const tithes = await Tithes.find(filter)
       .populate("submittedBy", "name role")
       .populate("reviewedBy", "name role");
 
-    const workBook = new excel.Workbook();
-
-    const worksheet = workBook.addWorksheet("Tithes");
-
-    worksheet.columns = [
-      { header: "Entry Date", key: "entryDate", width: 20 },
-      { header: "Service Type", key: "serviceType", width: 20 },
-      { header: "Total", key: "total", width: 15 },
-      { header: "Submitted By", key: "submittedBy", width: 20 },
-      { header: "Status", key: "status", width: 15 },
-      { header: "Reviewed By", key: "reviewedBy", width: 15 },
-    ];
-
-    generateTithesReport.forEach((item) => {
-      worksheet.addRow({
-        entryDate: item.entryDate,
-        serviceType: item.serviceType,
-        total: item.total,
-        submittedBy: item.submittedBy?.name || "",
-        status: item.status,
-        reviewedBy: item.reviewedBy?.name || "",
-      });
+    const wb = new excel.Workbook();
+    buildExcelSheet(wb.addWorksheet("Tithes"), {
+      reportName: "Tithes Report",
+      startDate,
+      endDate,
+      columns: TITHES_COLUMNS,
+      rows: mapTithesRows(tithes),
+      totals: [{ key: "total", label: "Total Balance:" }],
+      statusColorKey: "status",
     });
 
-    // Una — insert title
-    worksheet.insertRow(1, ["JOSCM Tithes Report"]);
-    worksheet.mergeCells("A1:F1");
-    worksheet.getCell("A1").font = { bold: true, size: 14 };
-    worksheet.getCell("A1").alignment = { horizontal: "center" };
-
-    // Pangalawa — style ang header (row 2 na ngayon)
-    worksheet.getRow(2).font = { bold: true, color: { argb: "FFFFFFFF" } };
-    ["A2", "B2", "C2", "D2", "E2", "F2"].forEach((cellRef) => {
-      worksheet.getCell(cellRef).fill = {
-        type: "pattern",
-        pattern: "solid",
-        fgColor: { argb: "FF4F8EF7" },
-      };
-    });
-    worksheet.getRow(2).alignment = { horizontal: "center" };
-
-    // Panghuli — borders
-    worksheet.eachRow((row) => {
-      row.eachCell((cell) => {
-        ((cell.border = {
-          top: { style: "thin" },
-          left: { style: "thin" },
-          bottom: { style: "thin" },
-          right: { style: "thin" },
-        }),
-          (cell.alignment = { horizontal: "center" }));
-      });
-    });
-
-    // Status color per row
-    generateTithesReport.forEach((item, index) => {
-      const rowIndex = index + 3; // +3 kasi title + header
-      const statusCell = worksheet.getCell(`E${rowIndex}`);
-
-      if (item.status === "approved") {
-        statusCell.font = { color: { argb: "FF34D399" }, bold: true };
-      } else if (item.status === "pending") {
-        statusCell.font = { color: { argb: "FFFBBF24" }, bold: true };
-      } else if (item.status === "rejected") {
-        statusCell.font = { color: { argb: "FFF87171" }, bold: true };
-      }
-    });
-
-    // Total balance sa baba (skip if walang rows — SUM(C3:C2) is invalid)
-    if (generateTithesReport.length > 0) {
-      const lastRow = generateTithesReport.length + 3;
-      worksheet.getCell(`C${lastRow}`).value = {
-        formula: `SUM(C3:C${lastRow - 1})`,
-      };
-      worksheet.getCell(`C${lastRow}`).font = { bold: true };
-      worksheet.getCell(`B${lastRow}`).value = "Total Balance:";
-      worksheet.getCell(`B${lastRow}`).font = { bold: true };
-    }
-
-    res.setHeader(
-      "Content-Type",
-      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    );
-    res.setHeader(
-      "Content-Disposition",
-      "attachment; filename=tithes-report.xlsx",
-    );
-    await workBook.xlsx.write(res);
+    res.setHeader("Content-Type", XLSX_TYPE);
+    res.setHeader("Content-Disposition", "attachment; filename=tithes-report.xlsx");
+    await wb.xlsx.write(res);
     res.end();
   } catch (error) {
     next(error);
   }
 };
 
-const centerText = (doc, text, colX, colWidth, y) => {
-  const textWidth = doc.widthOfString(String(text));
-  const x = colX + (colWidth - textWidth) / 2;
-  doc.text(String(text), x, y);
-};
-
-const colWidths = {
-  date: 100,
-  service: 120,
-  total: 80,
-  submittedBy: 100,
-  status: 80,
-  reviewedBy: 100,
-};
-
 const exportTithesPDF = async (req, res, next) => {
   try {
+    const range = parseDateRange(req, res);
+    if (!range) return;
     const { startDate, endDate } = req.query;
+
     const filter = {};
-
-    if (startDate && endDate) {
-      const start = parseDate(startDate);
-      const end = parseDate(endDate);
-      if (!start || !end)
-        return res.status(400).json({ error: "Invalid startDate or endDate" });
-      filter.entryDate = { $gte: start, $lte: end };
-    }
-
-    const generateTithesReport = await Tithes.find(filter)
+    if (range.start && range.end)
+      filter.entryDate = { $gte: range.start, $lte: range.end };
+    if (req.user.role === "member") filter.submittedBy = req.user.id;
+    const tithes = await Tithes.find(filter)
       .populate("submittedBy", "name role")
       .populate("reviewedBy", "name role");
 
-    const doc = new PDFDocument();
-
-    // I-pipe sa response — hindi sa file system
+    const doc = newPdf();
     res.setHeader("Content-Type", "application/pdf");
-    res.setHeader(
-      "Content-Disposition",
-      "attachment; filename=tithes-report.pdf",
-    );
+    res.setHeader("Content-Disposition", "attachment; filename=tithes-report.pdf");
     doc.pipe(res);
 
-    // Title
-    doc.fontSize(16).text("Tithes Report", { align: "center" });
-    doc.moveDown();
-
-    const tableLeft = 26;
-
-    // Table coordinates
-    const tableTop = 110;
-    const col = {
-      date: tableLeft,
-      service: tableLeft + 100,
-      total: tableLeft + 220,
-      submittedBy: tableLeft + 300,
-      status: tableLeft + 400,
-      reviewedBy: tableLeft + 480,
-    };
-    const rowHeight = 20;
-
-    // Draw header background
-    doc.rect(tableLeft, tableTop, 560, rowHeight).fill("#4F8EF7");
-
-    // Header text
-    doc.fillColor("white").fontSize(9).font("Helvetica-Bold");
-    centerText(doc, "Entry Date", col.date, colWidths.date, tableTop + 5);
-    centerText(
-      doc,
-      "Service Type",
-      col.service,
-      colWidths.service,
-      tableTop + 5,
-    );
-    centerText(doc, "Total", col.total, colWidths.total, tableTop + 5);
-    centerText(
-      doc,
-      "Submitted By",
-      col.submittedBy,
-      colWidths.submittedBy,
-      tableTop + 5,
-    );
-    centerText(doc, "Status", col.status, colWidths.status, tableTop + 5);
-    centerText(
-      doc,
-      "Rev. By",
-      col.reviewedBy,
-      colWidths.reviewedBy,
-      tableTop + 5,
-    );
-
-    // Data rows
-    doc.font("Helvetica").fillColor("black");
-    generateTithesReport.forEach((item, index) => {
-      const y = tableTop + rowHeight + index * rowHeight;
-
-      if (index % 2 === 0) {
-        doc.rect(tableLeft, y, 560, rowHeight).fill("#f0f4ff");
-      }
-
-      doc.fillColor("black").fontSize(8);
-      // ← palitan mo ang doc.text() ng centerText()
-      centerText(
-        doc,
-        new Date(item.entryDate).toLocaleDateString("en-PH"),
-        col.date,
-        colWidths.date,
-        y + 5,
-      );
-      centerText(doc, item.serviceType, col.service, colWidths.service, y + 5);
-      centerText(
-        doc,
-        item.total.toLocaleString(),
-        col.total,
-        colWidths.total,
-        y + 5,
-      );
-      centerText(
-        doc,
-        item.submittedBy?.name || "",
-        col.submittedBy,
-        colWidths.submittedBy,
-        y + 5,
-      );
-      centerText(doc, item.status, col.status, colWidths.status, y + 5);
-      centerText(
-        doc,
-        item.reviewedBy?.name || "",
-        col.reviewedBy,
-        colWidths.reviewedBy,
-        y + 5,
-      );
+    renderPdfDoc(doc, {
+      reportName: "Tithes Report",
+      startDate,
+      endDate,
+      sections: [
+        {
+          columns: TITHES_COLUMNS,
+          rows: mapTithesRows(tithes),
+          totals: [{ key: "total", label: "Total Balance" }],
+        },
+      ],
     });
-
-    const lastRowY =
-      tableTop + rowHeight + generateTithesReport.length * rowHeight + 30;
-
-    doc.fontSize(10).text(
-      `Generated: ${new Date().toLocaleDateString("en-PH")}`,
-      tableLeft,
-      lastRowY, // ← x:50 para left aligned
-      { align: "left" },
-    );
-
-    const totalBalance = generateTithesReport.reduce(
-      (sum, item) => sum + item.total,
-      0,
-    );
-
-    doc.fontSize(10).text(
-      `Total Balance: Php ${totalBalance.toLocaleString()}`,
-      tableLeft,
-      lastRowY + 20, // ← 20px below generated
-      { align: "left" },
-    );
 
     doc.end();
   } catch (error) {
@@ -340,94 +190,25 @@ const exportTithesPDF = async (req, res, next) => {
 
 const exportExpenseExcel = async (req, res, next) => {
   try {
+    const range = parseDateRange(req, res);
+    if (!range) return;
     const { startDate, endDate } = req.query;
-    const filter = {};
 
-    if (startDate && endDate) {
-      const start = parseDate(startDate);
-      const end = parseDate(endDate);
-      if (!start || !end)
-        return res.status(400).json({ error: "Invalid startDate or endDate" });
-      filter.date = { $gte: start, $lte: end };
-    }
+    const expenses = await fetchExpenses(range.start, range.end);
 
-    const getExpenseAll = await Expense.find(filter)
-      .populate("category", "name type")
-      .populate("recordedBy", "name role")
-      .populate("linkedId", "pcfNo");
-
-    const workBook = new excel.Workbook();
-
-    const worksheet = workBook.addWorksheet("Expense");
-
-    worksheet.columns = [
-      { header: "Date", key: "entryDate", width: 20 },
-      { header: "PCF No. Type", key: "pcfNo", width: 20 },
-      { header: "Category", key: "category", width: 15 },
-      { header: "Amount", key: "amount", width: 20 },
-      { header: "Source", key: "source", width: 15 },
-      { header: "Recorded By", key: "recordedBy", width: 15 },
-    ];
-
-    getExpenseAll.forEach((item) => {
-      worksheet.addRow({
-        entryDate: item.date,
-        pcfNo: item.linkedId?.pcfNo || "N/A",
-        category: item.category?.name || "",
-        amount: item.amount,
-        source: item.source,
-        recordedBy: item.recordedBy?.name || "",
-      });
+    const wb = new excel.Workbook();
+    buildExcelSheet(wb.addWorksheet("Expense"), {
+      reportName: "Expense Report",
+      startDate,
+      endDate,
+      columns: EXPENSE_COLUMNS,
+      rows: mapExpenseRows(expenses),
+      totals: [{ key: "amount", label: "Total Expenses:" }],
     });
 
-    // Una — insert title
-    worksheet.insertRow(1, ["JOSCM Expense Report"]);
-    worksheet.mergeCells("A1:F1");
-    worksheet.getCell("A1").font = { bold: true, size: 14 };
-    worksheet.getCell("A1").alignment = { horizontal: "center" };
-
-    // Pangalawa — style ang header (row 2 na ngayon)
-    worksheet.getRow(2).font = { bold: true, color: { argb: "FFFFFFFF" } };
-    ["A2", "B2", "C2", "D2", "E2", "F2"].forEach((cellRef) => {
-      worksheet.getCell(cellRef).fill = {
-        type: "pattern",
-        pattern: "solid",
-        fgColor: { argb: "FF4F8EF7" },
-      };
-    });
-    worksheet.getRow(2).alignment = { horizontal: "center" };
-
-    // Panghuli — borders
-    worksheet.eachRow((row) => {
-      row.eachCell((cell) => {
-        ((cell.border = {
-          top: { style: "thin" },
-          left: { style: "thin" },
-          bottom: { style: "thin" },
-          right: { style: "thin" },
-        }),
-          (cell.alignment = { horizontal: "center" }));
-      });
-    });
-
-    // Total balance sa baba (skip if walang rows — SUM(D3:D2) is invalid)
-    if (getExpenseAll.length > 0) {
-      const lastRow = getExpenseAll.length + 3;
-      worksheet.getCell(`D${lastRow}`).value = {
-        formula: `SUM(D3:D${lastRow - 1})`,
-      };
-      worksheet.getCell(`C${lastRow}`).value = "Total Expenses:";
-    }
-
-    res.setHeader(
-      "Content-Type",
-      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    );
-    res.setHeader(
-      "Content-Disposition",
-      "attachment; filename=expense-report.xlsx",
-    );
-    await workBook.xlsx.write(res);
+    res.setHeader("Content-Type", XLSX_TYPE);
+    res.setHeader("Content-Disposition", "attachment; filename=expense-report.xlsx");
+    await wb.xlsx.write(res);
     res.end();
   } catch (error) {
     next(error);
@@ -436,147 +217,160 @@ const exportExpenseExcel = async (req, res, next) => {
 
 const exportExpensePDF = async (req, res, next) => {
   try {
+    const range = parseDateRange(req, res);
+    if (!range) return;
     const { startDate, endDate } = req.query;
-    const filter = {};
 
-    if (startDate && endDate) {
-      const start = parseDate(startDate);
-      const end = parseDate(endDate);
-      if (!start || !end)
-        return res.status(400).json({ error: "Invalid startDate or endDate" });
-      filter.date = { $gte: start, $lte: end };
-    }
+    const expenses = await fetchExpenses(range.start, range.end);
 
-    const getExpenseAll = await Expense.find(filter)
-      .populate("category", "name type")
-      .populate("recordedBy", "name role")
-      .populate("linkedId", "pcfNo");
+    const doc = newPdf();
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", "attachment; filename=expense-report.pdf");
+    doc.pipe(res);
 
-    const doc = new PDFDocument();
+    renderPdfDoc(doc, {
+      reportName: "Expense Report",
+      startDate,
+      endDate,
+      sections: [
+        {
+          columns: EXPENSE_COLUMNS,
+          rows: mapExpenseRows(expenses),
+          totals: [{ key: "amount", label: "Total Expenses" }],
+        },
+      ],
+    });
 
-    // I-pipe sa response — hindi sa file system
+    doc.end();
+  } catch (error) {
+    next(error);
+  }
+};
+
+// ---- Combined (Tithes + Expense) — admin/auditor only ----
+const getCombinedReport = async (req, res, next) => {
+  try {
+    const range = parseDateRange(req, res);
+    if (!range) return;
+
+    const [tithes, expenses] = await Promise.all([
+      fetchTithes(range.start, range.end),
+      fetchExpenses(range.start, range.end),
+    ]);
+
+    res.status(200).json({
+      status: "Success",
+      summary: computeCombinedSummary(tithes, expenses),
+      tithes,
+      expenses,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+const exportCombinedExcel = async (req, res, next) => {
+  try {
+    const range = parseDateRange(req, res);
+    if (!range) return;
+    const { startDate, endDate } = req.query;
+
+    const [tithes, expenses] = await Promise.all([
+      fetchTithes(range.start, range.end),
+      fetchExpenses(range.start, range.end),
+    ]);
+    const summary = computeCombinedSummary(tithes, expenses);
+
+    const wb = new excel.Workbook();
+    buildCombinedSummarySheet(wb.addWorksheet("Summary"), {
+      startDate,
+      endDate,
+      summary,
+    });
+    buildExcelSheet(wb.addWorksheet("Tithes"), {
+      reportName: "Tithes Report",
+      startDate,
+      endDate,
+      columns: TITHES_COLUMNS,
+      rows: mapTithesRows(tithes),
+      totals: [{ key: "total", label: "Total Balance:" }],
+      statusColorKey: "status",
+    });
+    buildExcelSheet(wb.addWorksheet("Expense"), {
+      reportName: "Expense Report",
+      startDate,
+      endDate,
+      columns: EXPENSE_COLUMNS,
+      rows: mapExpenseRows(expenses),
+      totals: [{ key: "amount", label: "Total Expenses:" }],
+    });
+
+    res.setHeader("Content-Type", XLSX_TYPE);
+    res.setHeader(
+      "Content-Disposition",
+      "attachment; filename=financial-summary-report.xlsx",
+    );
+    await wb.xlsx.write(res);
+    res.end();
+  } catch (error) {
+    next(error);
+  }
+};
+
+const exportCombinedPDF = async (req, res, next) => {
+  try {
+    const range = parseDateRange(req, res);
+    if (!range) return;
+    const { startDate, endDate } = req.query;
+
+    const [tithes, expenses] = await Promise.all([
+      fetchTithes(range.start, range.end),
+      fetchExpenses(range.start, range.end),
+    ]);
+    const summary = computeCombinedSummary(tithes, expenses);
+
+    const doc = newPdf();
     res.setHeader("Content-Type", "application/pdf");
     res.setHeader(
       "Content-Disposition",
-      "attachment; filename=expense-report.pdf",
+      "attachment; filename=financial-summary-report.pdf",
     );
     doc.pipe(res);
 
-    // Title
-    doc.fontSize(16).text("Expense Report", { align: "center" });
-    doc.moveDown();
-
-    const tableLeft = 26;
-
-    // Table coordinates
-    const tableTop = 110;
-    const col = {
-      date: tableLeft,
-      pcfNo: tableLeft + 80,
-      category: tableLeft + 160,
-      amount: tableLeft + 280,
-      source: tableLeft + 370,
-      recordedBy: tableLeft + 460,
-    };
-
-    const colWidths = {
-      date: 80,
-      pcfNo: 80,
-      category: 120,
-      amount: 90,
-      source: 90,
-      recordedBy: 50,
-    };
-    const rowHeight = 20;
-
-    // Draw header background
-    doc.rect(tableLeft, tableTop, 560, rowHeight).fill("#4F8EF7");
-
-    // Header text
-    doc.fillColor("white").fontSize(9).font("Helvetica-Bold");
-    centerText(doc, "Entry Date", col.date, colWidths.date, tableTop + 5);
-    centerText(doc, "PCF No.", col.pcfNo, colWidths.pcfNo, tableTop + 5);
-    centerText(doc, "Category", col.category, colWidths.category, tableTop + 5);
-    centerText(doc, "Amount", col.amount, colWidths.amount, tableTop + 5);
-    centerText(doc, "Source", col.source, colWidths.source, tableTop + 5);
-    centerText(
-      doc,
-      "Rec. By",
-      col.recordedBy,
-      colWidths.recordedBy,
-      tableTop + 5,
-    );
-
-    // Data rows
-    doc.font("Helvetica").fillColor("black");
-    getExpenseAll.forEach((item, index) => {
-      const y = tableTop + rowHeight + index * rowHeight;
-
-      if (index % 2 === 0) {
-        doc.rect(tableLeft, y, 560, rowHeight).fill("#f0f4ff");
-      }
-
-      doc.fillColor("black").fontSize(8);
-      // ← palitan mo ang doc.text() ng centerText()
-      centerText(
-        doc,
-        new Date(item.date).toLocaleDateString("en-PH"),
-        col.date,
-        colWidths.date,
-        y + 5,
-      );
-      centerText(
-        doc,
-        item.linkedId?.pcfNo || "N/A",
-        col.pcfNo,
-        colWidths.pcfNo,
-        y + 5,
-      );
-      centerText(
-        doc,
-        item.category?.name || "",
-        col.category,
-        colWidths.category,
-        y + 5,
-      );
-      centerText(
-        doc,
-        item.amount.toLocaleString(),
-        col.amount,
-        colWidths.amount,
-        y + 5,
-      );
-      centerText(doc, item.source, col.source, colWidths.source, y + 5);
-      centerText(
-        doc,
-        item.recordedBy?.name || "",
-        col.recordedBy,
-        colWidths.recordedBy,
-        y + 5,
-      );
+    renderPdfDoc(doc, {
+      reportName: "Financial Summary Report",
+      startDate,
+      endDate,
+      summaryBlock: {
+        title: "Financial Summary",
+        rows: [
+          { label: "Total Tithes", value: peso(summary.totalTithes) },
+          { label: "Total Expenses", value: peso(summary.totalExpenses) },
+          {
+            label: "NET Position",
+            value: peso(summary.net),
+            color: summary.net >= 0 ? "#15803d" : "#b91c1c",
+          },
+          { label: "Tithes Entries", value: String(summary.tithesCount) },
+          { label: "Expense Entries", value: String(summary.expenseCount) },
+        ],
+        byCategory: summary.byCategory,
+      },
+      sections: [
+        {
+          title: "Tithes",
+          columns: TITHES_COLUMNS,
+          rows: mapTithesRows(tithes),
+          totals: [{ key: "total", label: "Total Balance" }],
+        },
+        {
+          title: "Expense",
+          columns: EXPENSE_COLUMNS,
+          rows: mapExpenseRows(expenses),
+          totals: [{ key: "amount", label: "Total Expenses" }],
+        },
+      ],
     });
-
-    const lastRowY =
-      tableTop + rowHeight + getExpenseAll.length * rowHeight + 30;
-
-    doc.fontSize(10).text(
-      `Generated: ${new Date().toLocaleDateString("en-PH")}`,
-      tableLeft,
-      lastRowY, // ← x:50 para left aligned
-      { align: "left" },
-    );
-
-    const totalBalance = getExpenseAll.reduce(
-      (sum, item) => sum + item.amount,
-      0,
-    );
-
-    doc.fontSize(10).text(
-      `Total Balance: Php ${totalBalance.toLocaleString()}`,
-      tableLeft,
-      lastRowY + 20, // ← 20px below generated
-      { align: "left" },
-    );
 
     doc.end();
   } catch (error) {
@@ -591,4 +385,7 @@ export {
   exportTithesPDF,
   exportExpenseExcel,
   exportExpensePDF,
+  getCombinedReport,
+  exportCombinedExcel,
+  exportCombinedPDF,
 };
