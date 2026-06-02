@@ -540,8 +540,13 @@ export function buildMonthlyBreakdownSheet(
 // ---------------------------------------------------------------------------
 const ROW_H = 20;
 const FOOTER_H = 30;
-const PDF_HEADER_FILL = "#4F8EF7";
-const PDF_BAND_FILL = "#f0f4ff";
+// Church palette (PDF hex mirrors the Excel ARGB consts above).
+const PDF_TEAL = "#326b7e";
+const PDF_GOLD = "#ccac55";
+const PDF_HEADER_FILL = PDF_TEAL;
+const PDF_BAND_FILL = "#eaf1f3"; // light-teal zebra striping
+const PDF_TEAL_TINT = "#dce7ea"; // subtotal / total bands
+const PDF_GOLD_TINT = "#f6efd6"; // Month NET accent
 
 const cellText = (doc, text, x, width, y, align = "center") => {
   const s = String(text ?? "");
@@ -557,10 +562,10 @@ const cellText = (doc, text, x, width, y, align = "center") => {
 };
 
 const drawDocHeader = (doc, { reportName, startDate, endDate, left, contentW, y }) => {
-  doc.fillColor("#111111").font("Helvetica-Bold").fontSize(18);
+  doc.fillColor(PDF_TEAL).font("Helvetica-Bold").fontSize(17);
   doc.text(CHURCH, left, y, { width: contentW, align: "center" });
   y += 22;
-  doc.fontSize(13).text(reportName, left, y, { width: contentW, align: "center" });
+  doc.fillColor(PDF_GOLD).fontSize(13).text(reportName, left, y, { width: contentW, align: "center" });
   y += 18;
   doc.font("Helvetica").fontSize(9).fillColor("#666666");
   doc.text(rangeLine(startDate, endDate), left, y, { width: contentW, align: "center" });
@@ -571,7 +576,7 @@ const drawDocHeader = (doc, { reportName, startDate, endDate, left, contentW, y 
 };
 
 const drawSummaryBlock = (doc, { summaryBlock, left, y, pageBottom }) => {
-  doc.font("Helvetica-Bold").fontSize(12).fillColor("#111111");
+  doc.font("Helvetica-Bold").fontSize(12).fillColor(PDF_TEAL);
   doc.text(summaryBlock.title || "Financial Summary", left, y, { lineBreak: false });
   y += 18;
   doc.fontSize(10);
@@ -774,7 +779,7 @@ export function renderCombinedMonthlyPdf(
       y = doc.page.margins.top;
     }
     if (heading) {
-      doc.font("Helvetica-Bold").fontSize(10).fillColor("#374151").text(heading, left, y, {
+      doc.font("Helvetica-Bold").fontSize(10).fillColor(PDF_TEAL).text(heading, left, y, {
         lineBreak: false,
       });
       y += 15;
@@ -789,7 +794,7 @@ export function renderCombinedMonthlyPdf(
       }
       if (r.style === "data" && r.band) doc.rect(left, y, totalW, ROW_H).fill(PDF_BAND_FILL);
       if (r.style === "subtotal" || r.style === "total")
-        doc.rect(left, y, totalW, ROW_H).fill("#e8eefb");
+        doc.rect(left, y, totalW, ROW_H).fill(PDF_TEAL_TINT);
       const bold = r.style === "subtotal" || r.style === "total";
       doc.fillColor("#111111").font(bold ? "Helvetica-Bold" : "Helvetica").fontSize(8);
       columns.forEach((c, i) => {
@@ -801,17 +806,35 @@ export function renderCombinedMonthlyPdf(
     });
   };
 
+  // We always render on the newest buffered page, so its index is count-1.
+  const pageIdx = () => doc.bufferedPageRange().count - 1;
+  // Box a month section with a teal outline; handles sections that span pages
+  // by drawing a segment per page (open where it continues).
+  const drawMonthBox = (startPage, startY, endPage, endY) => {
+    const pad = 1;
+    for (let p = startPage; p <= endPage; p++) {
+      doc.switchToPage(p);
+      const top = (p === startPage ? startY : doc.page.margins.top) - pad;
+      const bottom = (p === endPage ? endY : pageBottom) + pad;
+      doc.lineWidth(1.2).strokeColor(PDF_TEAL).rect(left - pad, top, contentW + pad * 2, bottom - top).stroke();
+    }
+    doc.switchToPage(endPage); // resume on the page we left off
+  };
+
   const months = monthsInScope(startDate, endDate, tithes, expenses);
   months.forEach((mi) => {
-    if (y + 60 > pageBottom) {
+    if (y + ROW_H * 2 > pageBottom) {
       doc.addPage();
       y = doc.page.margins.top;
     }
-    y += 8;
-    doc.font("Helvetica-Bold").fontSize(12).fillColor("#1e3a8a").text(monthLabel(mi), left, y, {
-      lineBreak: false,
-    });
-    y += 18;
+    y += 10;
+    const boxStartPage = pageIdx();
+    const boxStartY = y;
+    // Filled teal month-header band with white text (mirrors the Excel sheet).
+    doc.rect(left, y, contentW, ROW_H).fill(PDF_TEAL);
+    doc.fillColor("white").font("Helvetica-Bold").fontSize(12);
+    doc.text(monthLabel(mi), left + 6, y + 5, { lineBreak: false });
+    y += ROW_H + 4;
 
     // --- Weekly tithes ---
     const mt = tithes
@@ -886,17 +909,21 @@ export function renderCombinedMonthlyPdf(
       doc.addPage();
       y = doc.page.margins.top;
     }
-    doc.rect(left, y, contentW, ROW_H).fill("#dceafe");
+    doc.rect(left, y, contentW, ROW_H).fill(PDF_GOLD_TINT);
     doc.fillColor(net >= 0 ? "#15803d" : "#b91c1c").font("Helvetica-Bold").fontSize(9);
     cellText(doc, "Month NET", left, contentW - 95, y + 6, "right");
     cellText(doc, peso(net), left + contentW - 95, 95, y + 6, "right");
-    y += ROW_H + 6;
+    y += ROW_H;
+
+    // Box the whole month so it reads as one section at a glance.
+    drawMonthBox(boxStartPage, boxStartY, pageIdx(), y);
+    y += 8;
   });
 
   // --- Detailed-records appendix (full flat tables) ---
   doc.addPage();
   y = doc.page.margins.top;
-  doc.font("Helvetica-Bold").fontSize(13).fillColor("#111111").text("Detailed Records", left, y, {
+  doc.font("Helvetica-Bold").fontSize(13).fillColor(PDF_TEAL).text("Detailed Records", left, y, {
     lineBreak: false,
   });
   y += 22;
