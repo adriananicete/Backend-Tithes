@@ -82,13 +82,16 @@ const createManualExpense = async (req, res, next) => {
 
     if(amount <= 0) return res.status(400).json({ error: 'Amount must be greater than zero' });
 
+    // Remarks/particulars are the expense detail shown in financial reports.
+    if(!remarks || !String(remarks).trim()) return res.status(400).json({ error: 'Remarks / particulars required' });
+
     const newManualExpense = new Expense({
         source: 'manual',
         amount: amount,
         category: category,
         date: date,
         recordedBy: req.user.id,
-        remarks: remarks
+        remarks: String(remarks).trim()
     });
 
     await newManualExpense.save()
