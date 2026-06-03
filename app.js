@@ -1,6 +1,7 @@
 import { createServer } from 'http';
 import express from 'express';
 import cors from 'cors';
+import cookieParser from 'cookie-parser';
 import jwt from 'jsonwebtoken';
 import { Server as SocketIOServer } from 'socket.io';
 import helmet from 'helmet';
@@ -27,6 +28,7 @@ app.set('trust proxy', 1);
 // Middleware
 app.use(helmet());
 app.use(express.json());
+app.use(cookieParser());
 
 const allowedOrigins = (process.env.CORS_ORIGIN || '')
     .split(',')
@@ -72,8 +74,19 @@ const io = new SocketIOServer(httpServer, {
     },
 });
 
+// Parse the access_token cookie off the websocket handshake (cookies ride the
+// upgrade request just like any HTTP request), falling back to the auth payload.
+const readSocketToken = (socket) => {
+    const fromAuth = socket.handshake.auth?.token;
+    if (fromAuth) return fromAuth;
+    const cookieHeader = socket.handshake.headers?.cookie;
+    if (!cookieHeader) return null;
+    const match = cookieHeader.split(';').map(c => c.trim()).find(c => c.startsWith('access_token='));
+    return match ? decodeURIComponent(match.slice('access_token='.length)) : null;
+};
+
 io.use((socket, next) => {
-    const token = socket.handshake.auth?.token;
+    const token = readSocketToken(socket);
     if (!token) return next(new Error('Authentication required'));
     try {
         const decoded = jwt.verify(token, process.env.JWT_SECRET_KEY);

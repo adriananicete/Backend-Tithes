@@ -1,8 +1,6 @@
 import express from 'express';
 import rateLimit from 'express-rate-limit';
-import { userLogin, userLogout } from '../../controllers/auth/authController.js';
-import { verifyToken } from '../../middlewares/authMiddleware.js';
-import { authorizeRoles } from '../../middlewares/roleMiddleware.js';
+import { userLogin, userLogout, refreshAccessToken } from '../../controllers/auth/authController.js';
 
 const router = express.Router();
 
@@ -15,8 +13,19 @@ const loginLimiter = rateLimit({
     message: { error: 'Too many login attempts. Try again later.' },
 });
 
+// Slightly looser limiter for token refresh (called automatically by clients)
+const refreshLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 60,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { error: 'Too many refresh attempts. Try again later.' },
+});
+
 // Auth
 router.post('/login', loginLimiter, userLogin);
-router.post('/logout',verifyToken, userLogout);
+router.post('/refresh', refreshLimiter, refreshAccessToken);
+// Logout just clears cookies — must work even with an expired access token.
+router.post('/logout', userLogout);
 
 export default router;
