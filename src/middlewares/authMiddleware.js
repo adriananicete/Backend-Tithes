@@ -2,12 +2,16 @@ import jwt from "jsonwebtoken";
 
 export const verifyToken = (req, res, next) => {
   try {
-    const tokenHeader = req.headers.authorization;
+    // Prefer the httpOnly cookie; fall back to the Authorization header so
+    // header-based clients keep working during the cookie-auth transition.
+    let token = req.cookies?.access_token;
 
-    if (!tokenHeader || !tokenHeader.startsWith("Bearer "))
-      return res.status(401).json({ error: "No token, Access Denied!" });
-
-    const token = tokenHeader.split(" ")[1];
+    if (!token) {
+      const tokenHeader = req.headers.authorization;
+      if (tokenHeader && tokenHeader.startsWith("Bearer ")) {
+        token = tokenHeader.split(" ")[1];
+      }
+    }
 
     if (!token)
       return res.status(401).json({ error: "No token, Access Denied!" });
