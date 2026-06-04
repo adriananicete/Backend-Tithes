@@ -1,5 +1,6 @@
 import { Category } from "../../models/Category.js";
 import { isValidObjectId } from "../../utils/validate.js";
+import { recordAudit } from "../../utils/recordAudit.js";
 
 const getAllCategories = async (req, res, next) => {
   try {
@@ -28,6 +29,15 @@ const createCategory = async (req, res, next) => {
       createdBy,
     });
     await newCategory.save();
+
+    await recordAudit({
+      req,
+      action: "category.create",
+      targetModel: "Category",
+      targetId: newCategory._id,
+      targetRef: newCategory.name,
+      summary: `Created category ${newCategory.name} (${newCategory.type})`,
+    });
 
     res.status(201).json({
       status: "Success",
@@ -60,6 +70,15 @@ const updateCategory = async (req, res, next) => {
     if (!updatedCategory)
       return res.status(404).json({ error: "Category not found" });
 
+    await recordAudit({
+      req,
+      action: "category.update",
+      targetModel: "Category",
+      targetId: updatedCategory._id,
+      targetRef: updatedCategory.name,
+      summary: `Updated category ${updatedCategory.name}`,
+    });
+
     res.status(200).json({
       status: "Success",
       message: "Category updated",
@@ -81,6 +100,15 @@ const deleteCategory = async (req, res, next) => {
     const deletedCategory = await Category.findByIdAndDelete(id);
     if (!deletedCategory)
       return res.status(404).json({ error: "Category not found" });
+
+    await recordAudit({
+      req,
+      action: "category.delete",
+      targetModel: "Category",
+      targetId: deletedCategory._id,
+      targetRef: deletedCategory.name,
+      summary: `Deleted category ${deletedCategory.name}`,
+    });
 
     res.status(200).json({
       status: "Success",

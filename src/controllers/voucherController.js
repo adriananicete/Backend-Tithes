@@ -4,6 +4,7 @@ import { Voucher } from "../models/Voucher.js";
 import { Expense } from "../models/Expense.js";
 import { autoRecordExpense } from "../utils/autoRecordExpense.js";
 import { sendNotification, sendNotificationToRoles } from "../utils/sendNotification.js";
+import { recordAudit } from "../utils/recordAudit.js";
 
 const getAllVouchers = async (req, res, next) => {
   try {
@@ -106,6 +107,16 @@ const createVoucher = async (req, res, next) => {
       { new: true, runValidators: true }
     );
 
+    await recordAudit({
+      req,
+      action: "voucher.create",
+      targetModel: "Voucher",
+      targetId: newVoucher._id,
+      targetRef: newVoucher.pcfNo,
+      summary: `Created voucher ${newVoucher.pcfNo} for ${vouch.rfNo} (₱${amountNum})`,
+      meta: { rfNo: vouch.rfNo, amount: amountNum },
+    });
+
     await sendNotification({
       userId: vouch.requestedBy,
       message: `Voucher ${newVoucher.pcfNo} has been created for your request ${vouch.rfNo}`,
@@ -190,6 +201,16 @@ const cancelVoucher = async (req, res, next) => {
       },
       { new: true, runValidators: true }
     );
+
+    await recordAudit({
+      req,
+      action: "voucher.cancel",
+      targetModel: "Voucher",
+      targetId: voucher._id,
+      targetRef: voucher.pcfNo,
+      summary: `Cancelled voucher ${voucher.pcfNo}; reopened ${reopenedRf.rfNo}`,
+      meta: { rfNo: reopenedRf.rfNo, cancellationNote: cancellationNote || null },
+    });
 
     await sendNotification({
       userId: reopenedRf.requestedBy,

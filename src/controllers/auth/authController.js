@@ -9,6 +9,7 @@ import {
     clearAuthCookies,
 } from '../../utils/authTokens.js';
 import { sendPasswordResetEmail } from '../../utils/email.js';
+import { recordAudit } from '../../utils/recordAudit.js';
 
 const RESET_TOKEN_TTL_MS = 60 * 60 * 1000; // 1 hour
 const hashResetToken = (raw) => crypto.createHash('sha256').update(raw).digest('hex');
@@ -104,6 +105,15 @@ export const forgotPassword = async (req, res, next) => {
             user.resetPasswordExpires = new Date(Date.now() + RESET_TOKEN_TTL_MS);
             await user.save();
 
+            await recordAudit({
+                actor: { id: user._id, role: user.role, name: user.name },
+                action: 'auth.forgot_password',
+                targetModel: 'User',
+                targetId: user._id,
+                targetRef: user.email,
+                summary: 'Requested a password reset link',
+            });
+
             const base = (process.env.FRONTEND_URL || '').replace(/\/$/, '');
             const resetLink = `${base}/reset-password?token=${rawToken}`;
             try {
@@ -146,6 +156,15 @@ export const resetPassword = async (req, res, next) => {
         user.resetPasswordToken = null;
         user.resetPasswordExpires = null;
         await user.save();
+
+        await recordAudit({
+            actor: { id: user._id, role: user.role, name: user.name },
+            action: 'auth.reset_password',
+            targetModel: 'User',
+            targetId: user._id,
+            targetRef: user.email,
+            summary: 'Reset password via email link',
+        });
 
         return res.status(200).json({
             status: 'Success',

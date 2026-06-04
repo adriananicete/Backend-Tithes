@@ -2,6 +2,7 @@ import { Tithes } from "../models/TithesEntry.js";
 import { Expense } from "../models/Expense.js";
 import { sendNotification, sendNotificationToRoles } from "../utils/sendNotification.js";
 import { parseDate } from "../utils/validate.js";
+import { recordAudit } from "../utils/recordAudit.js";
 
 // Only DO and admin can approve/reject tithes (auditor is oversight/read-only).
 const REVIEWER_ROLES = ["do", "admin"];
@@ -101,6 +102,16 @@ const submitTithes = async (req, res, next) => {
     });
     await newTithes.save();
 
+    await recordAudit({
+      req,
+      action: "tithes.submit",
+      targetModel: "Tithes",
+      targetId: newTithes._id,
+      targetRef: serviceType,
+      summary: `Submitted tithes ₱${total} (${serviceType})`,
+      meta: { total, serviceType },
+    });
+
     await sendNotificationToRoles({
       roles: ["do", "admin"],
       message: "A new tithes entry is awaiting approval",
@@ -157,6 +168,15 @@ const approveTithes = async (req, res, next) => {
       },
     );
 
+    await recordAudit({
+      req,
+      action: "tithes.approve",
+      targetModel: "Tithes",
+      targetId: finderTithes._id,
+      targetRef: finderTithes.serviceType,
+      summary: `Approved tithes ₱${finderTithes.total} (${finderTithes.serviceType})`,
+    });
+
     await sendNotification({
       userId: finderTithes.submittedBy,
       message: "Your tithes entry has been approved",
@@ -210,6 +230,16 @@ const rejectTithes = async (req, res, next) => {
       { new: true },
     );
 
+    await recordAudit({
+      req,
+      action: "tithes.reject",
+      targetModel: "Tithes",
+      targetId: findTithes._id,
+      targetRef: findTithes.serviceType,
+      summary: `Rejected tithes ₱${findTithes.total} (${findTithes.serviceType})`,
+      meta: { rejectionNote },
+    });
+
     await sendNotification({
       userId: findTithes.submittedBy,
       message: "Your tithes entry has been rejected",
@@ -249,6 +279,15 @@ const updateTithes = async (req, res, next) => {
     const findTithes = await Tithes.findByIdAndUpdate(id, body, {
       new: true,
       runValidators: true,
+    });
+
+    await recordAudit({
+      req,
+      action: "tithes.update",
+      targetModel: "Tithes",
+      targetId: findyById._id,
+      targetRef: findyById.serviceType,
+      summary: `Updated tithes entry (${findyById.serviceType})`,
     });
 
     res.status(200).json({
