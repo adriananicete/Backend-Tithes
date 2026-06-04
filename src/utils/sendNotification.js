@@ -1,6 +1,15 @@
 import { Notification } from "../models/Notification.js"
 import { User } from "../models/User.js";
 import { emitToUser } from "../services/realtime.js";
+import { sendPushToUser } from "./webPush.js";
+
+// Frontend deep-link target for a notification, so tapping the phone push
+// opens the related record (same ?focus= pattern the pages already consume).
+const PUSH_ROUTE = { Tithes: "/tithes", RequestForm: "/request-form", Voucher: "/voucher" };
+const pushUrl = (refModel, refId) => {
+    const base = PUSH_ROUTE[refModel];
+    return base && refId ? `${base}?focus=${refId}` : "/dashboard";
+};
 
 export const sendNotification = async ({userId, message, type, refId, refModel }) => {
     const createNotif = new Notification({
@@ -14,6 +23,14 @@ export const sendNotification = async ({userId, message, type, refId, refModel }
     await createNotif.save();
 
     emitToUser(userId, "notification:new", createNotif);
+
+    // Phone push for when the app is closed (no-op if user has no subscription
+    // or VAPID isn't configured; never throws).
+    sendPushToUser(userId, {
+        title: "JOSCM Tithes",
+        body: message,
+        url: pushUrl(refModel, refId),
+    });
 
     return createNotif
 };
