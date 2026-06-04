@@ -13,10 +13,13 @@ import {
   updateRequestForm,
   validateRequestForm,
 } from "../controllers/requestFormController.js";
+import { addRfComment, getRfComments } from "../controllers/commentController.js";
 
 const router = express.Router();
 
 router.get("/", verifyToken, getAllRequestForms);
+router.get("/:id/comments", verifyToken, getRfComments);
+router.post("/:id/comments", verifyToken, addRfComment);
 router.post("/", verifyToken, createRequestForm);
 router.patch("/:id", verifyToken, updateRequestForm);
 router.delete("/:id", verifyToken, deleteRequestForm);
