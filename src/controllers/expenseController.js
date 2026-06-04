@@ -1,5 +1,6 @@
 import mongoose from "mongoose";
 import { Expense } from "../models/Expense.js";
+import { recordAudit } from "../utils/recordAudit.js";
 
 const getAllExpenses = async (req, res, next) => {
   try {
@@ -95,6 +96,16 @@ const createManualExpense = async (req, res, next) => {
     });
 
     await newManualExpense.save()
+
+    await recordAudit({
+        req,
+        action: 'expense.create',
+        targetModel: 'Expense',
+        targetId: newManualExpense._id,
+        targetRef: String(remarks).trim(),
+        summary: `Recorded manual expense ₱${amount}`,
+        meta: { amount },
+    });
 
     res.status(201).json({
         status: 'Success',

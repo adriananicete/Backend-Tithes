@@ -1,5 +1,6 @@
 import bcrypt from "bcrypt";
 import { User } from "../../models/User.js";
+import { recordAudit } from "../../utils/recordAudit.js";
 
 const getAllUsers = async (req, res, next) => {
   try {
@@ -57,6 +58,15 @@ const createUser = async (req, res, next) => {
 
     await newUser.save();
 
+    await recordAudit({
+      req,
+      action: "user.create",
+      targetModel: "User",
+      targetId: newUser._id,
+      targetRef: newUser.email,
+      summary: `Created user ${newUser.email} (${newUser.role})`,
+    });
+
     const { password: _password, ...userData } = newUser.toObject();
 
     res.status(201).json({
@@ -78,6 +88,15 @@ const updateUser = async (req, res, next) => {
       new: true,
     }).select("-password");
     if (!updatedUser) return res.status(404).json({ error: "User not found!" });
+
+    await recordAudit({
+      req,
+      action: "user.update",
+      targetModel: "User",
+      targetId: updatedUser._id,
+      targetRef: updatedUser.email,
+      summary: `Updated user ${updatedUser.email}`,
+    });
 
     res.status(200).json({
       status: "Success",
@@ -103,6 +122,15 @@ const isActiveUser = async (req, res, next) => {
     if (!findUserByIdAndUpdate)
       return res.status(404).json({ error: "User not found!" });
 
+    await recordAudit({
+      req,
+      action: "user.deactivate",
+      targetModel: "User",
+      targetId: findUserByIdAndUpdate._id,
+      targetRef: findUserByIdAndUpdate.email,
+      summary: `Deactivated user ${findUserByIdAndUpdate.email}`,
+    });
+
     res.status(200).json({
       status: "Success",
       message: "User Deactivated",
@@ -121,6 +149,15 @@ const deleteUser = async (req, res, next) => {
 
         const deletedUser  = await User.findByIdAndDelete(id);
         if(!deletedUser ) return res.status(404).json({ error: "User not found!" });
+
+        await recordAudit({
+            req,
+            action: 'user.delete',
+            targetModel: 'User',
+            targetId: deletedUser._id,
+            targetRef: deletedUser.email,
+            summary: `Deleted user ${deletedUser.email}`,
+        });
 
         res.status(200).json({
             status: 'Success',

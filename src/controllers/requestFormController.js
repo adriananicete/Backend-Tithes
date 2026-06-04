@@ -2,6 +2,7 @@ import mongoose from "mongoose";
 import { RequestForm } from "../models/RequestForm.js";
 import { sendNotification, sendNotificationToRoles } from "../utils/sendNotification.js";
 import { parseDate } from "../utils/validate.js";
+import { recordAudit } from "../utils/recordAudit.js";
 
 const RF_POPULATE = [
   { path: "requestedBy", select: "name role" },
@@ -109,6 +110,15 @@ const createRequestForm = async (req, res, next) => {
 
     await newRequestForm.save();
 
+    await recordAudit({
+      req,
+      action: "rf.create",
+      targetModel: "RequestForm",
+      targetId: newRequestForm._id,
+      targetRef: newRequestForm.rfNo,
+      summary: `Created ${newRequestForm.rfNo} (₱${newRequestForm.estimatedAmount})`,
+    });
+
     res.status(201).json({
       status: "Success",
       message: "Request Form Created",
@@ -148,6 +158,15 @@ const submitRequestForm = async (req, res, next) => {
     requestForm.status = "submitted";
     requestForm.submittedAt = Date.now();
     await requestForm.save();
+
+    await recordAudit({
+      req,
+      action: "rf.submit",
+      targetModel: "RequestForm",
+      targetId: requestForm._id,
+      targetRef: requestForm.rfNo,
+      summary: `Submitted ${requestForm.rfNo} for validation`,
+    });
 
     await sendNotificationToRoles({
       roles: ["validator", "auditor", "admin"],
@@ -224,6 +243,15 @@ const updateRequestForm = async (req, res, next) => {
       },
     );
 
+    await recordAudit({
+      req,
+      action: "rf.update",
+      targetModel: "RequestForm",
+      targetId: updatedRequestForm._id,
+      targetRef: updatedRequestForm.rfNo,
+      summary: `Updated ${updatedRequestForm.rfNo} (draft)`,
+    });
+
     res.status(200).json({
       status: "Success",
       message: "Updated Successfully",
@@ -251,6 +279,15 @@ const deleteRequestForm = async (req, res, next) => {
       return res.status(400).json({ error: "Status must be draft" });
 
     await RequestForm.findByIdAndDelete(id);
+
+    await recordAudit({
+      req,
+      action: "rf.delete",
+      targetModel: "RequestForm",
+      targetId: findRequestFormById._id,
+      targetRef: findRequestFormById.rfNo,
+      summary: `Deleted ${findRequestFormById.rfNo} (draft)`,
+    });
 
     res.status(200).json({
       status: "Success",
@@ -296,6 +333,15 @@ const validateRequestForm = async (req, res, next) => {
       },
       { new: true, runValidators: true },
     ).populate(RF_POPULATE);
+
+    await recordAudit({
+      req,
+      action: "rf.validate",
+      targetModel: "RequestForm",
+      targetId: updatedRequestForm._id,
+      targetRef: updatedRequestForm.rfNo,
+      summary: `Validated ${updatedRequestForm.rfNo}`,
+    });
 
     await sendNotification({
       userId: updatedRequestForm.requestedBy._id,
@@ -359,6 +405,15 @@ const approveRequestForm = async (req, res, next) => {
       },
       { new: true, runValidators: true },
     ).populate(RF_POPULATE);
+
+    await recordAudit({
+      req,
+      action: "rf.approve",
+      targetModel: "RequestForm",
+      targetId: approvedRequestForm._id,
+      targetRef: approvedRequestForm.rfNo,
+      summary: `Approved ${approvedRequestForm.rfNo}`,
+    });
 
     await sendNotification({
       userId: approvedRequestForm.requestedBy._id,
@@ -427,6 +482,16 @@ const rejectRequestForm = async (req, res, next) => {
       { new: true, runValidators: true },
     ).populate(RF_POPULATE);
 
+    await recordAudit({
+      req,
+      action: "rf.reject",
+      targetModel: "RequestForm",
+      targetId: rejectedRequestForm._id,
+      targetRef: rejectedRequestForm.rfNo,
+      summary: `Rejected ${rejectedRequestForm.rfNo}`,
+      meta: { rejectionNote },
+    });
+
     await sendNotification({
       userId: rejectedRequestForm.requestedBy._id,
       message: "Your request entry has been rejected",
@@ -479,6 +544,15 @@ const disburseRequestForm = async (req, res, next) => {
       { new: true, runValidators: true },
     ).populate(RF_POPULATE);
 
+    await recordAudit({
+      req,
+      action: "rf.disburse",
+      targetModel: "RequestForm",
+      targetId: disbursedRequestForm._id,
+      targetRef: disbursedRequestForm.rfNo,
+      summary: `Marked ${disbursedRequestForm.rfNo} as disbursed`,
+    });
+
     await sendNotification({
       userId: disbursedRequestForm.requestedBy._id,
       message: `Your request ${disbursedRequestForm.rfNo} has been disbursed. Please confirm receipt.`,
@@ -530,6 +604,15 @@ const receivedRequestForm = async (req, res, next) => {
       },
       { new: true, runValidators: true },
     ).populate(RF_POPULATE);
+
+    await recordAudit({
+      req,
+      action: "rf.receive",
+      targetModel: "RequestForm",
+      targetId: receivedForm._id,
+      targetRef: receivedForm.rfNo,
+      summary: `Confirmed receipt of ${receivedForm.rfNo}`,
+    });
 
     await sendNotificationToRoles({
       roles: ["admin", "auditor"],
