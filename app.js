@@ -19,6 +19,7 @@ import notificationRoutes from './src/routes/notificationRoutes.js';
 import reportRoutes from './src/routes/reportRoutes.js';
 import searchRoutes from './src/routes/searchRoutes.js';
 import auditRoutes from './src/routes/auditRoutes.js';
+import pushRoutes from './src/routes/pushRoutes.js';
 import { setIO } from './src/services/realtime.js';
 
 const PORT = process.env.PORT || 7002;
@@ -64,6 +65,7 @@ app.use('/api/notifications', notificationRoutes);
 app.use('/api/reports', reportRoutes);
 app.use('/api/search', searchRoutes);
 app.use('/api/audit-log', auditRoutes);
+app.use('/api/push', pushRoutes);
 
 // 404 + centralized error handling — must be last
 app.use(notFound);
