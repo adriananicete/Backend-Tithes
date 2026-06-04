@@ -3,27 +3,55 @@ import { Expense } from "../models/Expense.js";
 import { sendNotification, sendNotificationToRoles } from "../utils/sendNotification.js";
 import { parseDate } from "../utils/validate.js";
 
-const REVIEWER_ROLES = ["do", "auditor", "admin"];
+// Only DO and admin can approve/reject tithes (auditor is oversight/read-only).
+const REVIEWER_ROLES = ["do", "admin"];
+
+// Oversight roles see every per-entry row in the table.
+const TITHES_OVERSIGHT_ROLES = ["admin", "auditor", "pastor"];
+
+// Per-role row scoping for the tithes TABLE (the `data` array). Charts/summary
+// stay church-wide via the separate anonymized `chartData` payload, so limiting
+// rows here never hides church totals from anyone.
+//   - oversight (admin/auditor/pastor): all rows
+//   - do (the approver): pending queue + rows they reviewed + their own
+//   - everyone else (member/validator): their own submissions only
+const buildTithesScope = ({ role, id }) => {
+  if (TITHES_OVERSIGHT_ROLES.includes(role)) return {};
+  if (role === "do")
+    return { $or: [{ status: "pending" }, { reviewedBy: id }, { submittedBy: id }] };
+  return { submittedBy: id };
+};
 
 const getAllTithes = async (req, res, next) => {
   try {
 
     const { startDate, endDate } = req.query;
-    const filter = {};
+    const dateFilter = {};
 
     if (startDate && endDate) {
       const start = parseDate(startDate);
       const end = parseDate(endDate);
       if (!start || !end)
         return res.status(400).json({ error: "Invalid startDate or endDate" });
-      filter.entryDate = { $gte: start, $lte: end };
+      dateFilter.entryDate = { $gte: start, $lte: end };
     }
-    const getAllData = await Tithes.find(filter)
+
+    // Table rows — scoped to what this role may see per-entry.
+    const scope = buildTithesScope(req.user);
+    const data = await Tithes.find({ ...dateFilter, ...scope })
       .sort({ createdAt: -1 })
       .populate("submittedBy", "name role")
       .populate("reviewedBy", "name role");
 
-    const tithesTotalBalance = getAllData.reduce((acc, item) => acc + item.total, 0);
+    // Charts/summary — church-wide but anonymized (no submitter identity, no
+    // denominations). Carries no PII, so it is safe to return to every role and
+    // lets members still see the church's total collections/trend.
+    const chartData = await Tithes.find(dateFilter)
+      .select("entryDate serviceType total status")
+      .sort({ entryDate: 1 })
+      .lean();
+
+    const tithesTotalBalance = chartData.reduce((acc, item) => acc + (item.total || 0), 0);
 
     const [approvedAgg, expenseAgg] = await Promise.all([
       Tithes.aggregate([
@@ -43,8 +71,9 @@ const getAllTithes = async (req, res, next) => {
       status: "Success",
       totalBalance: tithesTotalBalance,
       availableBalance,
-      count: getAllData.length,
-      data: getAllData,
+      count: data.length,
+      data,
+      chartData,
     });
   } catch (error) {
     next(error);
@@ -73,7 +102,7 @@ const submitTithes = async (req, res, next) => {
     await newTithes.save();
 
     await sendNotificationToRoles({
-      roles: ["do", "auditor", "admin"],
+      roles: ["do", "admin"],
       message: "A new tithes entry is awaiting approval",
       type: "info",
       refId: newTithes._id,

@@ -41,7 +41,27 @@ const getAllRequestForms = async (req, res, next) => {
 
     if(status) filter.status = status;
     if(rfNo) filter.rfNo = rfNo;
-    if(req.user.role === 'member') filter.requestedBy = req.user.id;
+
+    // Per-role row scoping for the RF table.
+    //   - oversight (admin/auditor/pastor): all rows
+    //   - validator: validation queue (submitted) + rows they validated + own
+    //   - do: disbursement queue (voucher_created) + rows they disbursed + own
+    //   - member (and any other role): their own requests only
+    const { role, id } = req.user;
+    if (role === "validator")
+      filter.$or = [
+        { status: "submitted" },
+        { validatedBy: id },
+        { requestedBy: id },
+      ];
+    else if (role === "do")
+      filter.$or = [
+        { status: "voucher_created" },
+        { disbursedBy: id },
+        { requestedBy: id },
+      ];
+    else if (!["admin", "auditor", "pastor"].includes(role))
+      filter.requestedBy = id;
 
     const requestForms = await RequestForm.find(filter)
       .sort({ createdAt: -1 })
