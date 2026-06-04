@@ -17,6 +17,7 @@ import voucherRoutes from './src/routes/voucherRoutes.js';
 import expenseRoutes from './src/routes/expenseRoutes.js';
 import notificationRoutes from './src/routes/notificationRoutes.js';
 import reportRoutes from './src/routes/reportRoutes.js';
+import searchRoutes from './src/routes/searchRoutes.js';
 import { setIO } from './src/services/realtime.js';
 
 const PORT = process.env.PORT || 7002;
@@ -60,6 +61,7 @@ app.use('/api/vouchers', voucherRoutes);
 app.use('/api/expenses', expenseRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/reports', reportRoutes);
+app.use('/api/search', searchRoutes);
 
 // 404 + centralized error handling — must be last
 app.use(notFound);
