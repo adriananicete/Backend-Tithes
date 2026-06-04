@@ -14,6 +14,20 @@ const RF_POPULATE = [
   { path: "voucherId", select: "pcfNo amount" },
 ];
 
+// Per-role row scoping for the RF table (and reused by global search):
+//   - oversight (admin/auditor/pastor): all rows
+//   - validator: validation queue (submitted) + rows they validated + own
+//   - do: disbursement queue (voucher_created) + rows they disbursed + own
+//   - member (and any other role): their own requests only
+export const buildRfScope = ({ role, id }) => {
+  if (["admin", "auditor", "pastor"].includes(role)) return {};
+  if (role === "validator")
+    return { $or: [{ status: "submitted" }, { validatedBy: id }, { requestedBy: id }] };
+  if (role === "do")
+    return { $or: [{ status: "voucher_created" }, { disbursedBy: id }, { requestedBy: id }] };
+  return { requestedBy: id };
+};
+
 const generateRFNo = async () => {
   const lastRF = await RequestForm.findOne().sort({ createdAt: -1 });
   let newNumber = 1;
@@ -42,26 +56,8 @@ const getAllRequestForms = async (req, res, next) => {
     if(status) filter.status = status;
     if(rfNo) filter.rfNo = rfNo;
 
-    // Per-role row scoping for the RF table.
-    //   - oversight (admin/auditor/pastor): all rows
-    //   - validator: validation queue (submitted) + rows they validated + own
-    //   - do: disbursement queue (voucher_created) + rows they disbursed + own
-    //   - member (and any other role): their own requests only
-    const { role, id } = req.user;
-    if (role === "validator")
-      filter.$or = [
-        { status: "submitted" },
-        { validatedBy: id },
-        { requestedBy: id },
-      ];
-    else if (role === "do")
-      filter.$or = [
-        { status: "voucher_created" },
-        { disbursedBy: id },
-        { requestedBy: id },
-      ];
-    else if (!["admin", "auditor", "pastor"].includes(role))
-      filter.requestedBy = id;
+    // Apply per-role row scoping (shared with global search).
+    Object.assign(filter, buildRfScope(req.user));
 
     const requestForms = await RequestForm.find(filter)
       .sort({ createdAt: -1 })
