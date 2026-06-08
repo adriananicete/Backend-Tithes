@@ -18,6 +18,16 @@ const userSchema = new mongoose.Schema({
         type: Boolean,
         default: true
     },
+    // Profile photo (Cloudinary). avatarPublicId is kept so the previous image
+    // can be deleted from Cloudinary when the avatar is replaced or removed.
+    avatarUrl: {
+        type: String,
+        default: null,
+    },
+    avatarPublicId: {
+        type: String,
+        default: null,
+    },
     role: {
         required: true,
         type: String,

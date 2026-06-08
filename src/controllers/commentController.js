@@ -24,7 +24,7 @@ const getRfComments = async (req, res, next) => {
 
     const comments = await Comment.find({ refModel: "RequestForm", refId: id })
       .sort({ createdAt: 1 })
-      .populate("authorId", "name role");
+      .populate("authorId", "name role avatarUrl");
 
     res.status(200).json({ status: "Success", count: comments.length, data: comments });
   } catch (error) {
@@ -56,7 +56,7 @@ const addRfComment = async (req, res, next) => {
       authorId: req.user.id,
       text: String(text).trim(),
     });
-    await comment.populate("authorId", "name role");
+    await comment.populate("authorId", "name role avatarUrl");
 
     // Notify everyone who has acted on the RF, minus the comment author.
     const participantIds = [
