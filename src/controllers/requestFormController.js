@@ -5,13 +5,13 @@ import { parseDate } from "../utils/validate.js";
 import { recordAudit } from "../utils/recordAudit.js";
 
 const RF_POPULATE = [
-  { path: "requestedBy", select: "name role" },
+  { path: "requestedBy", select: "name role avatarUrl" },
   { path: "category", select: "name type" },
-  { path: "validatedBy", select: "name role" },
-  { path: "approvedBy", select: "name role" },
-  { path: "rejectedBy", select: "name role" },
-  { path: "disbursedBy", select: "name role" },
-  { path: "receivedBy", select: "name role" },
+  { path: "validatedBy", select: "name role avatarUrl" },
+  { path: "approvedBy", select: "name role avatarUrl" },
+  { path: "rejectedBy", select: "name role avatarUrl" },
+  { path: "disbursedBy", select: "name role avatarUrl" },
+  { path: "receivedBy", select: "name role avatarUrl" },
   { path: "voucherId", select: "pcfNo amount" },
 ];
 

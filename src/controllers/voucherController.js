@@ -16,10 +16,10 @@ const getAllVouchers = async (req, res, next) => {
       .populate({
         path: "rfId",
         select: "rfNo estimatedAmount status remarks requestedBy",
-        populate: { path: "requestedBy", select: "name" },
+        populate: { path: "requestedBy", select: "name avatarUrl" },
       })
       .populate("category", "name type")
-      .populate("createdBy", "name role");
+      .populate("createdBy", "name role avatarUrl");
 
     res.status(200).json({
       status: "Success",

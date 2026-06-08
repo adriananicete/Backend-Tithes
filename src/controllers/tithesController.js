@@ -41,8 +41,8 @@ const getAllTithes = async (req, res, next) => {
     const scope = buildTithesScope(req.user);
     const data = await Tithes.find({ ...dateFilter, ...scope })
       .sort({ createdAt: -1 })
-      .populate("submittedBy", "name role")
-      .populate("reviewedBy", "name role");
+      .populate("submittedBy", "name role avatarUrl")
+      .populate("reviewedBy", "name role avatarUrl");
 
     // Charts/summary — church-wide but anonymized (no submitter identity, no
     // denominations). Carries no PII, so it is safe to return to every role and

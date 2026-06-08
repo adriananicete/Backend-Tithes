@@ -12,13 +12,13 @@ const getAllExpenses = async (req, res, next) => {
           path: "rfId",
           select: "rfNo requestedBy approvedBy",
           populate: [
-            { path: "requestedBy", select: "name" },
-            { path: "approvedBy", select: "name" },
+            { path: "requestedBy", select: "name avatarUrl" },
+            { path: "approvedBy", select: "name avatarUrl" },
           ],
         },
       })
       .populate("category", "name type")
-      .populate("recordedBy", "name role");
+      .populate("recordedBy", "name role avatarUrl");
 
     res.status(200).json({
       status: "Success",
