@@ -1,5 +1,6 @@
 import bcrypt from "bcrypt";
 import { User } from "../../models/User.js";
+import cloudinary from "../../config/cloudinary.js";
 import { recordAudit } from "../../utils/recordAudit.js";
 
 const getAllUsers = async (req, res, next) => {
@@ -168,6 +169,70 @@ const deleteUser = async (req, res, next) => {
     }
 };
 
+// Admin sets/replaces another user's avatar. Same Cloudinary handling as the
+// self-service route, but targets :id and audits with the admin as actor.
+const setUserAvatar = async (req, res, next) => {
+  try {
+    if (!req.file) return res.status(400).json({ error: "No image uploaded" });
+
+    const { id } = req.params;
+    const user = await User.findById(id);
+    if (!user) return res.status(404).json({ error: "User not found!" });
+
+    if (user.avatarPublicId) {
+      try { await cloudinary.uploader.destroy(user.avatarPublicId); } catch (e) { /* non-fatal */ }
+    }
+
+    user.avatarUrl = req.file.path;
+    user.avatarPublicId = req.file.filename;
+    await user.save();
+
+    await recordAudit({
+      req,
+      action: "user.update_avatar",
+      targetModel: "User",
+      targetId: user._id,
+      targetRef: user.email,
+      summary: `Updated profile photo for ${user.email}`,
+    });
+
+    const { password: _pw, ...data } = user.toObject();
+    res.status(200).json({ status: "Success", message: "Profile photo updated", data });
+  } catch (error) {
+    next(error);
+  }
+};
+
+const removeUserAvatar = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const user = await User.findById(id);
+    if (!user) return res.status(404).json({ error: "User not found!" });
+
+    if (user.avatarPublicId) {
+      try { await cloudinary.uploader.destroy(user.avatarPublicId); } catch (e) { /* non-fatal */ }
+    }
+
+    user.avatarUrl = null;
+    user.avatarPublicId = null;
+    await user.save();
+
+    await recordAudit({
+      req,
+      action: "user.remove_avatar",
+      targetModel: "User",
+      targetId: user._id,
+      targetRef: user.email,
+      summary: `Removed profile photo for ${user.email}`,
+    });
+
+    const { password: _pw, ...data } = user.toObject();
+    res.status(200).json({ status: "Success", message: "Profile photo removed", data });
+  } catch (error) {
+    next(error);
+  }
+};
+
 export {
   getAllUsers,
   getUser,
@@ -175,4 +240,6 @@ export {
   updateUser,
   isActiveUser,
   deleteUser,
+  setUserAvatar,
+  removeUserAvatar,
 };

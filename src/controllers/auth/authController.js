@@ -40,7 +40,8 @@ export const userLogin = async (req, res, next) => {
             id: findUser._id,
             name: findUser.name,
             email: findUser.email,
-            role: findUser.role
+            role: findUser.role,
+            avatarUrl: findUser.avatarUrl,
         },
         // Still returned for backward compatibility with header-based clients
         // during the cookie-auth transition. New clients ignore this.
