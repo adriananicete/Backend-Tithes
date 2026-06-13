@@ -7,6 +7,9 @@ import { RequestForm } from '../src/models/RequestForm.js';
 import { Voucher } from '../src/models/Voucher.js';
 import { Expense } from '../src/models/Expense.js';
 import { Notification } from '../src/models/Notification.js';
+import { AuditLog } from '../src/models/AuditLog.js';
+import { Comment } from '../src/models/Comment.js';
+import { PushSubscription } from '../src/models/PushSubscription.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -20,14 +23,19 @@ if (!CONNECTION_STRING) {
 
 const confirmed = process.argv.slice(2).includes('--confirm');
 
-// Order: child refs first, then parents. Notifications point at all three;
-// Expense links to Voucher; Voucher links to RequestForm.
+// Order: child refs first, then parents. Notifications/AuditLog/Comment point
+// at the transactional docs; Expense links to Voucher; Voucher links to
+// RequestForm. PushSubscription links to User (kept) but is per-device test
+// data, so it is cleared too. Only User + Category survive a reset.
 const COLLECTIONS = [
-  { model: Notification, name: 'Notification' },
-  { model: Expense,      name: 'Expense' },
-  { model: Voucher,      name: 'Voucher' },
-  { model: RequestForm,  name: 'RequestForm' },
-  { model: Tithes,       name: 'Tithes' },
+  { model: Notification,     name: 'Notification' },
+  { model: AuditLog,         name: 'AuditLog' },
+  { model: Comment,          name: 'Comment' },
+  { model: PushSubscription, name: 'PushSubscription' },
+  { model: Expense,          name: 'Expense' },
+  { model: Voucher,          name: 'Voucher' },
+  { model: RequestForm,      name: 'RequestForm' },
+  { model: Tithes,           name: 'Tithes' },
 ];
 
 function maskUri(uri) {
