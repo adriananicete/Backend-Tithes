@@ -9,7 +9,6 @@ import { Expense } from '../src/models/Expense.js';
 import { Notification } from '../src/models/Notification.js';
 import { AuditLog } from '../src/models/AuditLog.js';
 import { Comment } from '../src/models/Comment.js';
-import { PushSubscription } from '../src/models/PushSubscription.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -25,13 +24,14 @@ const confirmed = process.argv.slice(2).includes('--confirm');
 
 // Order: child refs first, then parents. Notifications/AuditLog/Comment point
 // at the transactional docs; Expense links to Voucher; Voucher links to
-// RequestForm. PushSubscription links to User (kept) but is per-device test
-// data, so it is cleared too. Only User + Category survive a reset.
+// RequestForm. Only User + Category + PushSubscription survive a reset:
+// PushSubscription links to User (kept) and represents a real per-device
+// notification opt-in from actual staff, so it is preserved across resets so
+// users don't have to re-enable web push after a data reset.
 const COLLECTIONS = [
   { model: Notification,     name: 'Notification' },
   { model: AuditLog,         name: 'AuditLog' },
   { model: Comment,          name: 'Comment' },
-  { model: PushSubscription, name: 'PushSubscription' },
   { model: Expense,          name: 'Expense' },
   { model: Voucher,          name: 'Voucher' },
   { model: RequestForm,      name: 'RequestForm' },
