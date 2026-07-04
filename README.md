@@ -65,13 +65,14 @@ To redeploy manually: Render dashboard → service → Manual Deploy → Deploy 
 
 ## Seeding admin user against Atlas
 
-The `seed.js` script reads `CONNECTION_STRING` from the env. To seed against the production Atlas database:
+The `seed.js` script reads `CONNECTION_STRING` and `SEED_ADMIN_PASSWORD` from the env. To seed against the production Atlas database:
 
 1. Temporarily edit local `.env` so `CONNECTION_STRING` points at the Atlas URI (with `/JOSCM-Tithes` database name).
-2. Run `node --env-file=.env src/utils/seed.js`.
-3. Revert `.env` back to local Mongo so dev work doesn't touch production data.
+2. Set `SEED_ADMIN_PASSWORD` in `.env` to a strong password. Optionally override `SEED_ADMIN_NAME` (default `Adrian`) and `SEED_ADMIN_EMAIL` (default `adrian@joscm.com`).
+3. Run `node --env-file=.env src/utils/seed.js`.
+4. Revert `.env` back to local Mongo so dev work doesn't touch production data.
 
-The script creates: `name=Adrian`, `email=adrian@joscm.com`, `password=admin123` (hashed with bcrypt). Email is unique, so re-running fails with E11000. Change the password via the in-app Change Password feature after first login.
+The script fails fast if `SEED_ADMIN_PASSWORD` is unset. It creates an `admin` user (password hashed with bcrypt). Email is unique, so re-running fails with E11000. Change the password via the in-app Change Password feature after first login.
 
 ## API documentation
 
