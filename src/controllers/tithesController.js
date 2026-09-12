@@ -1,8 +1,8 @@
 import { Tithes } from "../models/TithesEntry.js";
-import { Expense } from "../models/Expense.js";
 import { sendNotification, sendNotificationToRoles } from "../utils/sendNotification.js";
 import { parseDate } from "../utils/validate.js";
 import { recordAudit } from "../utils/recordAudit.js";
+import { getAvailableBalance } from "../utils/balance.js";
 
 // Only DO and admin can approve/reject tithes (auditor is oversight/read-only).
 const REVIEWER_ROLES = ["do", "admin"];
@@ -54,19 +54,9 @@ const getAllTithes = async (req, res, next) => {
 
     const tithesTotalBalance = chartData.reduce((acc, item) => acc + (item.total || 0), 0);
 
-    const [approvedAgg, expenseAgg] = await Promise.all([
-      Tithes.aggregate([
-        { $match: { status: "approved" } },
-        { $group: { _id: null, sum: { $sum: "$total" } } },
-      ]),
-      Expense.aggregate([
-        { $group: { _id: null, sum: { $sum: "$amount" } } },
-      ]),
-    ]);
-
-    const totalApproved = approvedAgg[0]?.sum ?? 0;
-    const totalExpenses = expenseAgg[0]?.sum ?? 0;
-    const availableBalance = totalApproved - totalExpenses;
+    // Cash on hand. Shared with the request-form create handler, which caps a
+    // request against it, so the two never disagree on what the number means.
+    const availableBalance = await getAvailableBalance();
 
     res.status(200).json({
       status: "Success",

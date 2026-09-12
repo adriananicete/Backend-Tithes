@@ -8,7 +8,11 @@ const tithesSchema = new mongoose.Schema(
     },
     serviceType: {
       type: String,
-      enum: ["Sunday Service", "Special Service", "Anniversay Service"],
+      // "Anniversay" was a typo carried since the original build, so it lived
+      // in the data too. Corrected here; src/scripts/migrateServiceTypeSpelling.js
+      // moves the existing rows, which must be run before this deploys or those
+      // rows stop satisfying their own schema.
+      enum: ["Sunday Service", "Special Service", "Anniversary Service"],
       required: true,
     },
     denominations: [

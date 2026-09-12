@@ -3,6 +3,8 @@ import { RequestForm } from "../models/RequestForm.js";
 import { sendNotification, sendNotificationToRoles } from "../utils/sendNotification.js";
 import { parseDate } from "../utils/validate.js";
 import { recordAudit } from "../utils/recordAudit.js";
+import { getAvailableBalance, peso } from "../utils/balance.js";
+import { nextNumber } from "../utils/sequence.js";
 
 const RF_POPULATE = [
   { path: "requestedBy", select: "name role avatarUrl" },
@@ -27,18 +29,6 @@ export const buildRfScope = ({ role, id }) => {
   if (role === "do")
     return { $or: [{ status: "voucher_created" }, { disbursedBy: id }, { requestedBy: id }] };
   return { requestedBy: id };
-};
-
-const generateRFNo = async () => {
-  const lastRF = await RequestForm.findOne().sort({ createdAt: -1 });
-  let newNumber = 1;
-
-  if (lastRF && lastRF.rfNo) {
-    const lastNum = parseInt(lastRF.rfNo.split("-")[1], 10);
-    if (!isNaN(lastNum)) newNumber = lastNum + 1;
-  }
-
-  return `RF-${String(newNumber).padStart(4, "0")}`;
 };
 
 const getAllRequestForms = async (req, res, next) => {
@@ -98,8 +88,27 @@ const createRequestForm = async (req, res, next) => {
         .status(400)
         .json({ error: "Estimated Amount must be greater than 0" });
 
+    // A request may not exceed the church's cash on hand. This check lived only
+    // in the dialog, so a direct API call could ask for more than the church
+    // holds and the request would travel the whole pipeline before anyone
+    // noticed. Wording matches the client's exactly, so the two never disagree
+    // in front of a user.
+    //
+    // Deliberately NOT applied to updateRequestForm: editing a draft is free by
+    // design, and validators catch an over-balance edit at review time.
+    const available = await getAvailableBalance();
+    if (available <= 0)
+      return res.status(400).json({
+        error:
+          "The church has no available tithes balance — no requests can be made right now",
+      });
+    if (amount > available)
+      return res.status(400).json({
+        error: `Amount exceeds available tithes balance (${peso(available)})`,
+      });
+
     const newRequestForm = new RequestForm({
-      rfNo: await generateRFNo(),
+      rfNo: await nextNumber("rfNo", "RF", { model: RequestForm, field: "rfNo" }),
       entryDate,
       category,
       estimatedAmount: amount,

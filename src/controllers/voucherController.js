@@ -3,6 +3,7 @@ import { RequestForm } from "../models/RequestForm.js";
 import { Voucher } from "../models/Voucher.js";
 import { Expense } from "../models/Expense.js";
 import { autoRecordExpense } from "../utils/autoRecordExpense.js";
+import { nextNumber } from "../utils/sequence.js";
 import { sendNotification, sendNotificationToRoles } from "../utils/sendNotification.js";
 import { recordAudit } from "../utils/recordAudit.js";
 
@@ -69,20 +70,8 @@ const createVoucher = async (req, res, next) => {
     if (remarks !== undefined && remarks !== findRequestFormbyId.remarks)
       rfUpdates.remarks = remarks;
 
-    const generatePCFNo = async () => {
-      const lastPCF = await Voucher.findOne().sort({ createdAt: -1 });
-      let newNumber = 1;
-
-      if (lastPCF && lastPCF.pcfNo) {
-        const lastNum = parseInt(lastPCF.pcfNo.split("-")[1], 10);
-        if (!isNaN(lastNum)) newNumber = lastNum + 1;
-      }
-
-      return `PCF-${String(newNumber).padStart(4, "0")}`;
-    };
-
     const newVoucher = new Voucher({
-      pcfNo: await generatePCFNo(),
+      pcfNo: await nextNumber("pcfNo", "PCF", { model: Voucher, field: "pcfNo" }),
       rfId: rfId,
       date: Date.now(),
       category: category,
@@ -92,7 +81,29 @@ const createVoucher = async (req, res, next) => {
     });
     await newVoucher.save();
 
-    await autoRecordExpense(newVoucher);
+    // The expense is the other half of this transaction. Without it the money
+    // never leaves availableBalance, so the next request form is approved
+    // against funds that are already spent. If the expense cannot be written,
+    // the voucher must not survive either.
+    try {
+      await autoRecordExpense(newVoucher);
+    } catch (error) {
+      console.error(`autoRecordExpense failed for ${newVoucher.pcfNo}:`, error?.message);
+      try {
+        await Voucher.deleteOne({ _id: newVoucher._id });
+      } catch (rollbackError) {
+        // The worst case, and the one that must never be quiet: a voucher left
+        // behind with no expense row.
+        console.error(
+          `ROLLBACK FAILED — voucher ${newVoucher.pcfNo} exists with no expense row:`,
+          rollbackError?.message,
+        );
+      }
+      return res.status(500).json({
+        error:
+          "Could not record the expense for this voucher. Nothing was saved — please try again.",
+      });
+    }
 
     const vouch = await RequestForm.findByIdAndUpdate(
       rfId,
